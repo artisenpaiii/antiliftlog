@@ -111,7 +111,7 @@ export function DayGrid({ columns, rows, onColumnsReordered, onRowsReordered }: 
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
       <section className="overflow-auto max-h-[70vh]">
-        <table className="w-full text-sm">
+        <table className="text-sm">
           <thead className="sticky top-0 z-10 bg-card">
             <tr className="border-b border-border">
               <th className="w-8 bg-card" />

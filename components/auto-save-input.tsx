@@ -14,7 +14,7 @@ export function CellInput({ value, onChange, onBlur }: CellInputProps) {
       value={value}
       onChange={(e) => onChange(e.target.value)}
       onBlur={onBlur}
-      className="h-8 text-sm"
+      className="h-8 min-w-[8rem] text-sm"
     />
   );
 }

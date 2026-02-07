@@ -29,7 +29,7 @@ export function SortableColumnHeader({ id, label }: SortableColumnHeaderProps) {
     <th
       ref={setNodeRef}
       style={style}
-      className="px-2 py-2 text-left text-xs font-medium text-muted-foreground bg-card"
+      className="px-2 py-2 text-left text-xs font-medium text-muted-foreground bg-card whitespace-nowrap"
     >
       <div className="flex items-center gap-1">
         <button
