@@ -5,7 +5,6 @@ import { WeekTable } from "./week-table";
 import { DayTable } from "./day-table";
 import { DayColumnTable } from "./day-column-table";
 import { DayRowTable } from "./day-row-table";
-import { DayCellTable } from "./day-cell-table";
 
 export {
   ProgramTable,
@@ -14,7 +13,6 @@ export {
   DayTable,
   DayColumnTable,
   DayRowTable,
-  DayCellTable,
 };
 
 export interface Tables {
@@ -24,7 +22,6 @@ export interface Tables {
   days: DayTable;
   dayColumns: DayColumnTable;
   dayRows: DayRowTable;
-  dayCells: DayCellTable;
 }
 
 export function createTables(supabase: SupabaseClient): Tables {
@@ -35,6 +32,5 @@ export function createTables(supabase: SupabaseClient): Tables {
     days: new DayTable(supabase),
     dayColumns: new DayColumnTable(supabase),
     dayRows: new DayRowTable(supabase),
-    dayCells: new DayCellTable(supabase),
   };
 }

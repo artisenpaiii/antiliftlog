@@ -13,8 +13,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { DayGrid, cellKey } from "@/components/day-grid";
-import type { Day, DayColumn, DayRow, DayCell } from "@/lib/types/database";
+import { DayGrid } from "@/components/day-grid";
+import type { Day, DayColumn, DayRow } from "@/lib/types/database";
 
 interface DayCardProps {
   day: Day;
@@ -25,7 +25,6 @@ interface DayCardProps {
 export function DayCard({ day, initialColumns, onDeleted }: DayCardProps) {
   const [columns, setColumns] = useState<DayColumn[]>(initialColumns ?? []);
   const [rows, setRows] = useState<DayRow[]>([]);
-  const [cells, setCells] = useState<Map<string, DayCell>>(new Map());
   const [loading, setLoading] = useState(!initialColumns);
   const [addingRow, setAddingRow] = useState(false);
 
@@ -52,24 +51,8 @@ export function DayCard({ day, initialColumns, onDeleted }: DayCardProps) {
       console.error("Failed to load rows:", rowResult.error);
     }
 
-    const cols = colResult.data ?? [];
-    const rws = rowResult.data ?? [];
-    setColumns(cols);
-    setRows(rws);
-
-    if (rws.length > 0) {
-      const rowIds = rws.map((r) => r.id);
-      const cellResult = await tables.dayCells.findByRowIds(rowIds);
-      if (cellResult.error) {
-        console.error("Failed to load cells:", cellResult.error);
-      }
-      const cellMap = new Map<string, DayCell>();
-      for (const cell of cellResult.data ?? []) {
-        cellMap.set(cellKey(cell.day_row_id, cell.day_column_id), cell);
-      }
-      setCells(cellMap);
-    }
-
+    setColumns(colResult.data ?? []);
+    setRows(rowResult.data ?? []);
     setLoading(false);
   }, [day.id, initialColumns]);
 
@@ -84,6 +67,7 @@ export function DayCard({ day, initialColumns, onDeleted }: DayCardProps) {
     const { data, error } = await tables.dayRows.create({
       day_id: day.id,
       order: rows.length,
+      cells: {},
     });
 
     if (error || !data) {
@@ -160,7 +144,6 @@ export function DayCard({ day, initialColumns, onDeleted }: DayCardProps) {
       <DayGrid
         columns={columns}
         rows={rows}
-        cells={cells}
         onColumnsReordered={handleColumnsReordered}
         onRowsReordered={handleRowsReordered}
       />

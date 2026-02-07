@@ -26,4 +26,11 @@ export class DayRowTable extends BaseTable<
       .order("order");
     return { data: data as DayRow[] | null, error: this.toError(error) };
   }
+
+  async updateCells(
+    rowId: string,
+    cells: Record<string, string>,
+  ): Promise<DbResult<DayRow>> {
+    return this.update(rowId, { cells });
+  }
 }

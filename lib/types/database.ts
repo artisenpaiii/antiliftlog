@@ -49,15 +49,7 @@ export interface DayRow {
   id: string;
   day_id: string;
   order: number;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface DayCell {
-  id: string;
-  day_row_id: string;
-  day_column_id: string;
-  value: string | null;
+  cells: Record<string, string>;
   created_at: string;
   updated_at: string;
 }
@@ -76,8 +68,6 @@ export type DayColumnInsert = Omit<DayColumn, "id" | "created_at" | "updated_at"
 
 export type DayRowInsert = Omit<DayRow, "id" | "created_at" | "updated_at">;
 
-export type DayCellInsert = Omit<DayCell, "id" | "created_at" | "updated_at">;
-
 // Update types (all fields optional except id)
 
 export type ProgramUpdate = Partial<Omit<Program, "id" | "created_by" | "created_at" | "updated_at">>;
@@ -91,5 +81,3 @@ export type DayUpdate = Partial<Omit<Day, "id" | "created_at" | "updated_at">>;
 export type DayColumnUpdate = Partial<Omit<DayColumn, "id" | "created_at" | "updated_at">>;
 
 export type DayRowUpdate = Partial<Omit<DayRow, "id" | "created_at" | "updated_at">>;
-
-export type DayCellUpdate = Partial<Omit<DayCell, "id" | "created_at" | "updated_at">>;

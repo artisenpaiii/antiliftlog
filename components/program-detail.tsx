@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Layers } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { createTables } from "@/lib/db";
 import { BlockSidebar } from "@/components/block-sidebar";
@@ -61,7 +62,12 @@ export function ProgramDetail({ program, initialBlocks }: ProgramDetailProps) {
       </div>
 
       <div className="flex min-h-[400px] rounded-lg border bg-card">
-        <div className="w-56 shrink-0 border-r">
+        <div
+          className={cn(
+            "md:w-56 md:shrink-0 md:border-r",
+            selectedBlockId ? "hidden md:block" : "w-full"
+          )}
+        >
           <BlockSidebar
             programId={program.id}
             blocks={blocks}
@@ -72,9 +78,17 @@ export function ProgramDetail({ program, initialBlocks }: ProgramDetailProps) {
             onBlockDeleted={handleBlockDeleted}
           />
         </div>
-        <div className="flex-1">
+        <div
+          className={cn(
+            "flex-1",
+            selectedBlockId ? "w-full" : "hidden md:block"
+          )}
+        >
           {selectedBlock ? (
-            <BlockDetail block={selectedBlock} />
+            <BlockDetail
+              block={selectedBlock}
+              onBack={() => setSelectedBlockId(null)}
+            />
           ) : (
             <div className="flex h-full items-center justify-center">
               <div className="text-center">

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import {
+  ArrowLeft,
   Calendar,
   Plus,
   Loader2,
@@ -39,14 +40,26 @@ import type {
   Day,
   DayColumn,
   DayRow,
-  DayCell,
 } from "@/lib/types/database";
+
+function remapCellKeys(
+  cells: Record<string, string>,
+  columnIdMap: Map<string, string>,
+): Record<string, string> {
+  const remapped: Record<string, string> = {};
+  for (const [oldColId, value] of Object.entries(cells)) {
+    const newColId = columnIdMap.get(oldColId);
+    if (newColId) remapped[newColId] = value;
+  }
+  return remapped;
+}
 
 interface BlockDetailProps {
   block: Block;
+  onBack?: () => void;
 }
 
-export function BlockDetail({ block }: BlockDetailProps) {
+export function BlockDetail({ block, onBack }: BlockDetailProps) {
   const [weeks, setWeeks] = useState<Week[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedTab, setSelectedTab] = useState<string>("");
@@ -167,7 +180,6 @@ export function BlockDetail({ block }: BlockDetailProps) {
       day: Day;
       columns: DayColumn[];
       rows: DayRow[];
-      cells: DayCell[];
     }[] = [];
 
     for (const day of sourceDays) {
@@ -178,15 +190,8 @@ export function BlockDetail({ block }: BlockDetailProps) {
 
       const columns = colResult.data ?? [];
       const rows = rowResult.data ?? [];
-      let cells: DayCell[] = [];
 
-      if (rows.length > 0) {
-        const rowIds = rows.map((r) => r.id);
-        const cellResult = await tables.dayCells.findByRowIds(rowIds);
-        cells = cellResult.data ?? [];
-      }
-
-      dayData.push({ day, columns, rows, cells });
+      dayData.push({ day, columns, rows });
     }
 
     // Create new week
@@ -202,7 +207,7 @@ export function BlockDetail({ block }: BlockDetailProps) {
     }
 
     // Clone each day
-    for (const { day, columns, rows, cells } of dayData) {
+    for (const { day, columns, rows } of dayData) {
       const { data: newDay } = await tables.days.create({
         week_id: newWeek.id,
         day_number: day.day_number,
@@ -227,43 +232,15 @@ export function BlockDetail({ block }: BlockDetailProps) {
         }
       }
 
-      // Clone rows
-      const rowIdMap = new Map<string, string>();
+      // Clone rows with remapped cells
       if (rows.length > 0) {
-        const { data: newRows } = await tables.dayRows.createMany(
+        await tables.dayRows.createMany(
           rows.map((row) => ({
             day_id: newDay.id,
             order: row.order,
+            cells: remapCellKeys(row.cells, columnIdMap),
           })),
         );
-        if (newRows) {
-          for (let i = 0; i < rows.length; i++) {
-            rowIdMap.set(rows[i].id, newRows[i].id);
-          }
-        }
-      }
-
-      // Clone cells
-      if (cells.length > 0) {
-        const cellInserts = cells
-          .map((cell) => {
-            const newRowId = rowIdMap.get(cell.day_row_id);
-            const newColId = columnIdMap.get(cell.day_column_id);
-            if (!newRowId || !newColId) return null;
-            return {
-              day_row_id: newRowId,
-              day_column_id: newColId,
-              value: cell.value,
-            };
-          })
-          .filter(
-            (c): c is { day_row_id: string; day_column_id: string; value: string | null } =>
-              c !== null,
-          );
-
-        if (cellInserts.length > 0) {
-          await tables.dayCells.createMany(cellInserts);
-        }
       }
     }
 
@@ -272,10 +249,24 @@ export function BlockDetail({ block }: BlockDetailProps) {
     setDuplicating(null);
   }
 
+  const backButton = onBack ? (
+    <button
+      type="button"
+      onClick={onBack}
+      className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors mb-4 md:hidden"
+    >
+      <ArrowLeft size={14} />
+      {block.name}
+    </button>
+  ) : null;
+
   if (loading) {
     return (
-      <div className="flex h-full items-center justify-center">
-        <Loader2 size={16} className="animate-spin text-muted-foreground" />
+      <div className="p-6">
+        {backButton}
+        <div className="flex h-full items-center justify-center">
+          <Loader2 size={16} className="animate-spin text-muted-foreground" />
+        </div>
       </div>
     );
   }
@@ -283,6 +274,7 @@ export function BlockDetail({ block }: BlockDetailProps) {
   if (weeks.length === 0) {
     return (
       <div className="flex h-full flex-col items-center justify-center p-6">
+        {backButton}
         <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-accent">
           <Calendar size={16} className="text-muted-foreground" />
         </div>
@@ -307,9 +299,10 @@ export function BlockDetail({ block }: BlockDetailProps) {
 
   return (
     <div className="p-6">
+      {backButton}
       <Tabs value={selectedTab} onValueChange={setSelectedTab}>
-        <div className="flex items-center gap-2">
-          <TabsList variant="line">
+        <div className="flex items-center gap-2 overflow-x-auto">
+          <TabsList variant="line" className="flex-nowrap">
             {weeks.map((week) => (
               <div key={week.id} className="group relative flex items-center">
                 <TabsTrigger value={week.id}>
