@@ -23,7 +23,7 @@ const CHART_COLORS = [
   "hsl(0, 70%, 55%)",    // red
 ];
 
-interface WeekDataPoint {
+export interface WeekDataPoint {
   label: string;
   [exerciseName: string]: number | string;
 }

@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { Trophy } from "lucide-react";
-import { VolumeChart } from "@/components/volume-chart";
+import { VolumeChart, type WeekDataPoint } from "@/components/volume-chart";
 import type { Competition } from "@/lib/types/database";
 
 const LIFTS = ["squat", "bench", "deadlift"] as const;
@@ -85,7 +85,7 @@ export function CompetitionStats({ competitions }: CompetitionStatsProps) {
 
   const data = useMemo(() => {
     return sorted.map((comp) => {
-      const point: Record<string, number | string> = {
+      const point: WeekDataPoint = {
         label: formatDate(comp.meet_date),
       };
 

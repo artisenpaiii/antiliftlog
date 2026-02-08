@@ -2,9 +2,10 @@ import { createClient } from "@/lib/supabase/server";
 import { createTables } from "@/lib/db";
 import { ProfilePage } from "@/components/profile-page";
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 import type { UserMetadata } from "@/lib/types/database";
 
-export default async function ProfilePageRoute() {
+async function ProfileContent() {
   const supabase = await createClient();
   const { data: { user }, error: userError } = await supabase.auth.getUser();
 
@@ -40,5 +41,13 @@ export default async function ProfilePageRoute() {
       initialMetadata={initialMetadata}
       email={user.email ?? ""}
     />
+  );
+}
+
+export default function ProfilePageRoute() {
+  return (
+    <Suspense>
+      <ProfileContent />
+    </Suspense>
   );
 }
