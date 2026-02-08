@@ -54,6 +54,37 @@ export interface DayRow {
   updated_at: string;
 }
 
+export interface Competition {
+  id: string;
+  created_by: string;
+  meet_name: string;
+  meet_date: string;
+  weight_class: string | null;
+  bodyweight_kg: number | null;
+  squat_1_kg: number | null;
+  squat_1_good: boolean | null;
+  squat_2_kg: number | null;
+  squat_2_good: boolean | null;
+  squat_3_kg: number | null;
+  squat_3_good: boolean | null;
+  bench_1_kg: number | null;
+  bench_1_good: boolean | null;
+  bench_2_kg: number | null;
+  bench_2_good: boolean | null;
+  bench_3_kg: number | null;
+  bench_3_good: boolean | null;
+  deadlift_1_kg: number | null;
+  deadlift_1_good: boolean | null;
+  deadlift_2_kg: number | null;
+  deadlift_2_good: boolean | null;
+  deadlift_3_kg: number | null;
+  deadlift_3_good: boolean | null;
+  placing_rank: number | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 // Insert types (omit server-generated fields)
 
 export type ProgramInsert = Omit<Program, "id" | "created_at" | "updated_at">;
@@ -68,6 +99,8 @@ export type DayColumnInsert = Omit<DayColumn, "id" | "created_at" | "updated_at"
 
 export type DayRowInsert = Omit<DayRow, "id" | "created_at" | "updated_at">;
 
+export type CompetitionInsert = Omit<Competition, "id" | "created_at" | "updated_at">;
+
 // Update types (all fields optional except id)
 
 export type ProgramUpdate = Partial<Omit<Program, "id" | "created_by" | "created_at" | "updated_at">>;
@@ -81,3 +114,31 @@ export type DayUpdate = Partial<Omit<Day, "id" | "created_at" | "updated_at">>;
 export type DayColumnUpdate = Partial<Omit<DayColumn, "id" | "created_at" | "updated_at">>;
 
 export type DayRowUpdate = Partial<Omit<DayRow, "id" | "created_at" | "updated_at">>;
+
+export type CompetitionUpdate = Partial<Omit<Competition, "id" | "created_by" | "created_at" | "updated_at">>;
+
+export interface StatsSettings {
+  id: string;
+  program_id: string;
+  created_by: string;
+  exercise_label: string;
+  sets_label: string;
+  reps_label: string;
+  weight_label: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export type StatsSettingsInsert = Omit<StatsSettings, "id" | "created_at" | "updated_at">;
+
+export type StatsSettingsUpdate = Partial<Omit<StatsSettings, "id" | "created_by" | "created_at" | "updated_at">>;
+
+export interface UserMetadata {
+  display_name: string;
+  pb_squat_gym: number | null;
+  pb_bench_gym: number | null;
+  pb_deadlift_gym: number | null;
+  pb_squat_comp: number | null;
+  pb_bench_comp: number | null;
+  pb_deadlift_comp: number | null;
+}

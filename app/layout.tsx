@@ -10,6 +10,12 @@ export const metadata: Metadata = {
   metadataBase: new URL(defaultUrl),
   title: "LiftLog",
   description: "Track your training programs, workouts, and progress",
+  themeColor: "#7c3aed",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "LiftLog",
+  },
 };
 
 const geistSans = Geist({

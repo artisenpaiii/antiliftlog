@@ -52,7 +52,7 @@ export function ProgramDetail({ program, initialBlocks }: ProgramDetailProps) {
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 min-h-0 flex-1">
       <div className="flex flex-col gap-2">
         <Link href="/dashboard/programs" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors mb-2">
           <ArrowLeft size={14} />
@@ -61,7 +61,7 @@ export function ProgramDetail({ program, initialBlocks }: ProgramDetailProps) {
         <InlineEdit value={programName} onSave={handleProgramRename} className="text-2xl font-semibold tracking-tight" />
       </div>
 
-      <div className="flex min-h-[400px] rounded-lg border bg-card">
+      <div className="flex min-h-0 flex-1 rounded-lg border bg-card">
         <div
           className={cn(
             "md:w-56 md:shrink-0 md:border-r",

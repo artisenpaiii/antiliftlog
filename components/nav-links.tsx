@@ -1,13 +1,13 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { LayoutDashboard, Dumbbell, BarChart3, User } from "lucide-react";
+import { Dumbbell, Trophy, BarChart3, User } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const links = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/dashboard/programs", label: "Programs", icon: Dumbbell },
+  { href: "/dashboard/competitions", label: "Competitions", icon: Trophy },
   { href: "/dashboard/stats", label: "Stats", icon: BarChart3 },
   { href: "/dashboard/profile", label: "Profile", icon: User },
 ];
@@ -22,10 +22,7 @@ export function NavLinks({ variant = "sidebar" }: NavLinksProps) {
   return (
     <>
       {links.map(({ href, label, icon: Icon }) => {
-        const isActive =
-          href === "/dashboard"
-            ? pathname === "/dashboard"
-            : pathname.startsWith(href);
+        const isActive = pathname.startsWith(href);
 
         if (variant === "bottom-tab") {
           return (

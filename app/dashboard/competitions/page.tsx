@@ -2,9 +2,9 @@ import { createClient } from "@/lib/supabase/server";
 import { createTables } from "@/lib/db";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
-import { StatsPage } from "@/components/stats-page";
+import { CompetitionsPage } from "@/components/competitions-page";
 
-async function StatsContent() {
+async function CompetitionsContent() {
   const supabase = await createClient();
   const { data, error } = await supabase.auth.getClaims();
 
@@ -14,23 +14,15 @@ async function StatsContent() {
 
   const userId = data.claims.sub;
   const tables = createTables(supabase);
-  const [{ data: programs }, { data: competitions }] = await Promise.all([
-    tables.programs.findByUserId(userId),
-    tables.competitions.findByUserId(userId),
-  ]);
+  const { data: competitions } = await tables.competitions.findByUserId(userId);
 
-  return (
-    <StatsPage
-      initialPrograms={programs ?? []}
-      initialCompetitions={competitions ?? []}
-    />
-  );
+  return <CompetitionsPage initialCompetitions={competitions ?? []} />;
 }
 
 export default function Page() {
   return (
     <Suspense>
-      <StatsContent />
+      <CompetitionsContent />
     </Suspense>
   );
 }

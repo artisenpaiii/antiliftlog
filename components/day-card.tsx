@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { Plus, Loader2, Trash2 } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
-import { createTables } from "@/lib/db";
+import { useState } from "react";
+import { Plus, Loader2, Trash2, ChevronRight } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
@@ -14,156 +14,216 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { DayGrid } from "@/components/day-grid";
-import type { Day, DayColumn, DayRow } from "@/lib/types/database";
+import { useBlockCache } from "@/lib/contexts/block-cache-context";
+import type { Day } from "@/lib/types/database";
 
 interface DayCardProps {
   day: Day;
-  initialColumns?: DayColumn[];
-  onDeleted?: (dayId: string) => void;
 }
 
-export function DayCard({ day, initialColumns, onDeleted }: DayCardProps) {
-  const [columns, setColumns] = useState<DayColumn[]>(initialColumns ?? []);
-  const [rows, setRows] = useState<DayRow[]>([]);
-  const [loading, setLoading] = useState(!initialColumns);
+export function DayCard({ day }: DayCardProps) {
+  const {
+    getColumns,
+    getRows,
+    addRow,
+    addColumn,
+    deleteDay,
+    deleteColumn,
+    deleteRow,
+    reorderColumns,
+    reorderRows,
+    updateRowCells,
+    expandedDays,
+    toggleDay,
+  } = useBlockCache();
+
+  const columns = getColumns(day.id);
+  const rows = getRows(day.id);
+  const expanded = expandedDays.has(day.id);
   const [addingRow, setAddingRow] = useState(false);
+  const [showColumnInput, setShowColumnInput] = useState(false);
+  const [addingColumn, setAddingColumn] = useState(false);
+  const [newColumnLabel, setNewColumnLabel] = useState("");
 
   // Delete state
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  const loadData = useCallback(async () => {
-    const supabase = createClient();
-    const tables = createTables(supabase);
-
-    const [colResult, rowResult] = await Promise.all([
-      initialColumns
-        ? Promise.resolve({ data: initialColumns, error: null })
-        : tables.dayColumns.findByDayId(day.id),
-      tables.dayRows.findByDayId(day.id),
-    ]);
-
-    if (colResult.error) {
-      console.error("Failed to load columns:", colResult.error);
-    }
-    if (rowResult.error) {
-      console.error("Failed to load rows:", rowResult.error);
-    }
-
-    setColumns(colResult.data ?? []);
-    setRows(rowResult.data ?? []);
-    setLoading(false);
-  }, [day.id, initialColumns]);
-
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
-
   async function handleAddRow() {
     setAddingRow(true);
-    const supabase = createClient();
-    const tables = createTables(supabase);
-    const { data, error } = await tables.dayRows.create({
+    await addRow(day.id, {
       day_id: day.id,
       order: rows.length,
       cells: {},
     });
-
-    if (error || !data) {
-      console.error("Failed to add row:", error);
-      setAddingRow(false);
-      return;
-    }
-
-    setRows((prev) => [...prev, data]);
     setAddingRow(false);
+  }
+
+  async function handleAddColumn() {
+    const label = newColumnLabel.trim();
+    if (!label) return;
+
+    setAddingColumn(true);
+    const result = await addColumn(day.id, {
+      day_id: day.id,
+      label,
+      order: columns.length,
+    });
+
+    if (result) {
+      setNewColumnLabel("");
+    }
+    setAddingColumn(false);
   }
 
   async function handleDelete() {
     setIsDeleting(true);
     setDeleteError(null);
 
-    const supabase = createClient();
-    const tables = createTables(supabase);
-    const { error } = await tables.days.delete(day.id);
+    const success = await deleteDay(day.id);
 
-    if (error) {
-      setDeleteError(error);
+    if (!success) {
+      setDeleteError("Failed to delete day");
       setIsDeleting(false);
       return;
     }
 
     setDeleteOpen(false);
     setIsDeleting(false);
-    onDeleted?.(day.id);
   }
 
-  function handleColumnsReordered(reordered: DayColumn[]) {
-    setColumns(reordered);
+  function handleColumnDeleted(colId: string) {
+    deleteColumn(day.id, colId);
   }
 
-  function handleRowsReordered(reordered: DayRow[]) {
-    setRows(reordered);
+  function handleRowDeleted(rowId: string) {
+    deleteRow(day.id, rowId);
+  }
+
+  function handleCellSaved(rowId: string, cells: Record<string, string>) {
+    updateRowCells(day.id, rowId, cells);
   }
 
   const dayLabel = day.name ?? `Day ${day.day_number}`;
 
-  if (loading) {
-    return (
-      <div className="rounded-lg border border-border">
-        <div className="flex items-center gap-2 border-b border-border px-4 py-3">
-          <h4 className="text-sm font-medium">{dayLabel}</h4>
-        </div>
-        <div className="flex items-center justify-center py-8">
-          <Loader2 size={16} className="animate-spin text-muted-foreground" />
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="rounded-lg border border-border">
-      <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+      <button
+        type="button"
+        onClick={() => toggleDay(day.id)}
+        className={cn(
+          "flex w-full items-center gap-2 px-4 py-3 text-left transition-colors hover:bg-muted/50",
+          expanded && "border-b border-border",
+        )}
+      >
+        <ChevronRight
+          size={14}
+          className={cn(
+            "text-muted-foreground transition-transform duration-150",
+            expanded && "rotate-90",
+          )}
+        />
         <h4 className="text-sm font-medium flex-1">{dayLabel}</h4>
         <span className="text-xs text-muted-foreground">
-          {columns.length} {columns.length === 1 ? "column" : "columns"}
+          {rows.length} {rows.length === 1 ? "row" : "rows"}
         </span>
-        {onDeleted && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 text-muted-foreground hover:text-destructive"
-            onClick={() => setDeleteOpen(true)}
-          >
-            <Trash2 size={14} />
-          </Button>
-        )}
-      </div>
-
-      <DayGrid
-        columns={columns}
-        rows={rows}
-        onColumnsReordered={handleColumnsReordered}
-        onRowsReordered={handleRowsReordered}
-      />
-
-      <div className="px-4 py-3">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={handleAddRow}
-          disabled={addingRow}
-          className="text-muted-foreground"
+        <span
+          role="button"
+          tabIndex={0}
+          onClick={(e) => {
+            e.stopPropagation();
+            setDeleteOpen(true);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.stopPropagation();
+              setDeleteOpen(true);
+            }
+          }}
+          className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:text-destructive hover:bg-muted transition-colors"
         >
-          {addingRow ? (
-            <Loader2 size={14} className="animate-spin" />
-          ) : (
-            <Plus size={14} />
-          )}
-          Add Row
-        </Button>
-      </div>
+          <Trash2 size={14} />
+        </span>
+      </button>
+
+      {expanded && (
+        <>
+          <DayGrid
+            columns={columns}
+            rows={rows}
+            onColumnsReordered={(reordered) => reorderColumns(day.id, reordered)}
+            onRowsReordered={(reordered) => reorderRows(day.id, reordered)}
+            onRowDeleted={handleRowDeleted}
+            onColumnDeleted={handleColumnDeleted}
+            onCellSaved={handleCellSaved}
+          />
+
+          <div className="flex items-center gap-2 px-4 py-3">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleAddRow}
+              disabled={addingRow}
+              className="text-muted-foreground"
+            >
+              {addingRow ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <Plus size={14} />
+              )}
+              Add Row
+            </Button>
+            {showColumnInput ? (
+              <form
+                className="flex items-center gap-1"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  handleAddColumn();
+                }}
+              >
+                <Input
+                  value={newColumnLabel}
+                  onChange={(e) => setNewColumnLabel(e.target.value)}
+                  placeholder="Column name"
+                  className="h-8 w-32 text-sm"
+                  disabled={addingColumn}
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") {
+                      setShowColumnInput(false);
+                      setNewColumnLabel("");
+                    }
+                  }}
+                />
+                <Button
+                  type="submit"
+                  variant="ghost"
+                  size="sm"
+                  disabled={addingColumn || !newColumnLabel.trim()}
+                  className="text-muted-foreground"
+                >
+                  {addingColumn ? (
+                    <Loader2 size={14} className="animate-spin" />
+                  ) : (
+                    "Add"
+                  )}
+                </Button>
+              </form>
+            ) : (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowColumnInput(true)}
+                className="text-muted-foreground"
+              >
+                <Plus size={14} />
+                Add Column
+              </Button>
+            )}
+          </div>
+        </>
+      )}
 
       {/* Delete Day Dialog */}
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>

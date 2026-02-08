@@ -22,7 +22,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <LogoutButton />
         </div>
       </aside>
-      <main className="flex-1 px-4 py-6 md:px-8 md:py-8 pb-20 md:pb-8 overflow-auto">{children}</main>
+      <main className="flex flex-col flex-1 px-4 py-6 md:px-8 md:py-8 pb-20 md:pb-8 overflow-auto">{children}</main>
       <MobileNav />
     </div>
   );
