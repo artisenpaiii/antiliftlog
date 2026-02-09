@@ -15,6 +15,7 @@ import type {
   Week,
   WeekInsert,
   Day,
+  DayUpdate,
   DayColumn,
   DayColumnInsert,
   DayRow,
@@ -34,6 +35,7 @@ interface BlockCacheContextValue {
   duplicateWeek(sourceWeek: Week): Promise<Week | null>;
 
   deleteDay(dayId: string): Promise<boolean>;
+  updateDay(dayId: string, update: DayUpdate): Promise<boolean>;
   cacheInsertDay(weekId: string, day: Day, columns: DayColumn[]): void;
 
   addColumn(dayId: string, insert: DayColumnInsert): Promise<DayColumn | null>;
@@ -399,6 +401,35 @@ export function BlockCacheProvider({
     [],
   );
 
+  const updateDay = useCallback(
+    async (dayId: string, update: DayUpdate): Promise<boolean> => {
+      const supabase = createClient();
+      const tables = createTables(supabase);
+      const { data, error } = await tables.days.update(dayId, update);
+
+      if (error || !data) {
+        console.error("Failed to update day:", error);
+        return false;
+      }
+
+      setDaysByWeekId((prev) => {
+        const next = new Map(prev);
+        for (const [weekId, days] of next) {
+          const idx = days.findIndex((d) => d.id === dayId);
+          if (idx !== -1) {
+            const updated = [...days];
+            updated[idx] = data;
+            next.set(weekId, updated);
+            break;
+          }
+        }
+        return next;
+      });
+      return true;
+    },
+    [],
+  );
+
   const cacheInsertDay = useCallback(
     (weekId: string, day: Day, columns: DayColumn[]): void => {
       setDaysByWeekId((prev) => {
@@ -646,6 +677,7 @@ export function BlockCacheProvider({
     deleteWeek,
     duplicateWeek,
     deleteDay,
+    updateDay,
     cacheInsertDay,
     addColumn,
     deleteColumn,

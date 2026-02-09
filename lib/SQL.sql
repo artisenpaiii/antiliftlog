@@ -334,6 +334,18 @@ with check (
   )
 );
 
+-- =========================
+-- MIGRATION: Add sleep tracking to days
+-- =========================
+
+ALTER TABLE public.days
+ADD COLUMN sleep_time numeric(4,2),
+ADD COLUMN sleep_quality integer;
+
+ALTER TABLE public.days
+ADD CONSTRAINT sleep_quality_range
+CHECK (sleep_quality BETWEEN 0 AND 100);
+
 -- day_cells
 drop policy if exists day_cells_all on public.day_cells;
 create policy day_cells_all
@@ -372,3 +384,9 @@ with check (
       and p.created_by = auth.uid()
   )
 );
+
+-- =========================
+-- MIGRATION: Add rpe_label to stats_settings
+-- =========================
+
+ALTER TABLE public.stats_settings ADD COLUMN rpe_label varchar;

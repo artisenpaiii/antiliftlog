@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Loader2, Trash2, ChevronRight } from "lucide-react";
+import { Plus, Loader2, Trash2, ChevronRight, Moon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
@@ -17,6 +18,22 @@ import { DayGrid } from "@/components/day-grid";
 import { useBlockCache } from "@/lib/contexts/block-cache-context";
 import type { Day } from "@/lib/types/database";
 
+function decimalToTimeStr(decimal: number): string {
+  const hours = Math.floor(decimal);
+  const minutes = Math.round((decimal % 1) * 60);
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
+function timeStrToDecimal(timeStr: string): number | null {
+  const trimmed = timeStr.trim();
+  if (trimmed === "") return null;
+  const [hoursStr, minutesStr] = trimmed.split(":");
+  const hours = parseInt(hoursStr, 10);
+  const minutes = parseInt(minutesStr, 10);
+  if (isNaN(hours) || isNaN(minutes)) return null;
+  return hours + minutes / 60;
+}
+
 interface DayCardProps {
   day: Day;
 }
@@ -28,6 +45,7 @@ export function DayCard({ day }: DayCardProps) {
     addRow,
     addColumn,
     deleteDay,
+    updateDay,
     deleteColumn,
     deleteRow,
     reorderColumns,
@@ -44,6 +62,13 @@ export function DayCard({ day }: DayCardProps) {
   const [showColumnInput, setShowColumnInput] = useState(false);
   const [addingColumn, setAddingColumn] = useState(false);
   const [newColumnLabel, setNewColumnLabel] = useState("");
+
+  // Day info state
+  const [infoOpen, setInfoOpen] = useState(false);
+  const [savingInfo, setSavingInfo] = useState(false);
+  const [infoError, setInfoError] = useState<string | null>(null);
+  const [sleepTime, setSleepTime] = useState("");
+  const [sleepQuality, setSleepQuality] = useState("");
 
   // Delete state
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -73,8 +98,50 @@ export function DayCard({ day }: DayCardProps) {
 
     if (result) {
       setNewColumnLabel("");
+      setShowColumnInput(false);
     }
     setAddingColumn(false);
+  }
+
+  function handleOpenInfo() {
+    setSleepTime(day.sleep_time != null ? decimalToTimeStr(day.sleep_time) : "");
+    setSleepQuality(day.sleep_quality != null ? String(day.sleep_quality) : "");
+    setInfoError(null);
+    setInfoOpen(true);
+  }
+
+  async function handleSaveInfo() {
+    setSavingInfo(true);
+    setInfoError(null);
+
+    const parsedTime = sleepTime.trim() === "" ? null : timeStrToDecimal(sleepTime);
+    const parsedQuality = sleepQuality.trim() === "" ? null : parseInt(sleepQuality, 10);
+
+    if (parsedTime != null && (isNaN(parsedTime) || parsedTime < 0 || parsedTime > 24)) {
+      setInfoError("Sleep time must be between 0 and 24 hours");
+      setSavingInfo(false);
+      return;
+    }
+
+    if (parsedQuality != null && (isNaN(parsedQuality) || parsedQuality < 0 || parsedQuality > 100)) {
+      setInfoError("Sleep quality must be between 0 and 100");
+      setSavingInfo(false);
+      return;
+    }
+
+    const success = await updateDay(day.id, {
+      sleep_time: parsedTime,
+      sleep_quality: parsedQuality,
+    });
+
+    if (!success) {
+      setInfoError("Failed to save day info");
+      setSavingInfo(false);
+      return;
+    }
+
+    setSavingInfo(false);
+    setInfoOpen(false);
   }
 
   async function handleDelete() {
@@ -133,6 +200,28 @@ export function DayCard({ day }: DayCardProps) {
           tabIndex={0}
           onClick={(e) => {
             e.stopPropagation();
+            handleOpenInfo();
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.stopPropagation();
+              handleOpenInfo();
+            }
+          }}
+          className={cn(
+            "inline-flex h-7 w-7 items-center justify-center rounded-md transition-colors hover:bg-muted",
+            day.sleep_time != null || day.sleep_quality != null
+              ? "text-primary"
+              : "text-muted-foreground",
+          )}
+        >
+          <Moon size={14} />
+        </span>
+        <span
+          role="button"
+          tabIndex={0}
+          onClick={(e) => {
+            e.stopPropagation();
             setDeleteOpen(true);
           }}
           onKeyDown={(e) => {
@@ -174,56 +263,138 @@ export function DayCard({ day }: DayCardProps) {
               )}
               Add Row
             </Button>
-            {showColumnInput ? (
-              <form
-                className="flex items-center gap-1"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  handleAddColumn();
-                }}
-              >
-                <Input
-                  value={newColumnLabel}
-                  onChange={(e) => setNewColumnLabel(e.target.value)}
-                  placeholder="Column name"
-                  className="h-8 w-32 text-sm"
-                  disabled={addingColumn}
-                  autoFocus
-                  onKeyDown={(e) => {
-                    if (e.key === "Escape") {
-                      setShowColumnInput(false);
-                      setNewColumnLabel("");
-                    }
-                  }}
-                />
-                <Button
-                  type="submit"
-                  variant="ghost"
-                  size="sm"
-                  disabled={addingColumn || !newColumnLabel.trim()}
-                  className="text-muted-foreground"
-                >
-                  {addingColumn ? (
-                    <Loader2 size={14} className="animate-spin" />
-                  ) : (
-                    "Add"
-                  )}
-                </Button>
-              </form>
-            ) : (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowColumnInput(true)}
-                className="text-muted-foreground"
-              >
-                <Plus size={14} />
-                Add Column
-              </Button>
-            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowColumnInput(true)}
+              className="text-muted-foreground"
+            >
+              <Plus size={14} />
+              Add Column
+            </Button>
           </div>
         </>
       )}
+
+      {/* Day Info Dialog */}
+      <Dialog open={infoOpen} onOpenChange={setInfoOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Day Info</DialogTitle>
+            <DialogDescription>
+              Track sleep and recovery for{" "}
+              <span className="font-medium text-foreground">{dayLabel}</span>.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleSaveInfo();
+            }}
+            className="space-y-4"
+          >
+            <div className="space-y-2">
+              <Label htmlFor="sleep-time">Sleep Time</Label>
+              <Input
+                id="sleep-time"
+                type="time"
+                value={sleepTime}
+                onChange={(e) => setSleepTime(e.target.value)}
+                placeholder="HH:MM"
+                disabled={savingInfo}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="sleep-quality">Sleep Quality (0–100)</Label>
+              <Input
+                id="sleep-quality"
+                type="number"
+                step="1"
+                min="0"
+                max="100"
+                value={sleepQuality}
+                onChange={(e) => setSleepQuality(e.target.value)}
+                placeholder="e.g. 80"
+                disabled={savingInfo}
+              />
+            </div>
+            {infoError && (
+              <p className="text-destructive text-sm">{infoError}</p>
+            )}
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setInfoOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={savingInfo}>
+                {savingInfo ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  "Save"
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Column Dialog */}
+      <Dialog
+        open={showColumnInput}
+        onOpenChange={(open) => {
+          setShowColumnInput(open);
+          if (!open) setNewColumnLabel("");
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add Column</DialogTitle>
+            <DialogDescription>
+              Enter a name for the new column.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleAddColumn();
+            }}
+          >
+            <Input
+              value={newColumnLabel}
+              onChange={(e) => setNewColumnLabel(e.target.value)}
+              placeholder="Column name"
+              className="mb-4"
+              disabled={addingColumn}
+              autoFocus
+            />
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setShowColumnInput(false);
+                  setNewColumnLabel("");
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={addingColumn || !newColumnLabel.trim()}
+              >
+                {addingColumn ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  "Add"
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* Delete Day Dialog */}
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>

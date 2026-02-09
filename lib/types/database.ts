@@ -32,6 +32,8 @@ export interface Day {
   week_id: string;
   day_number: number;
   name: string | null;
+  sleep_time: number | null;
+  sleep_quality: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -93,7 +95,10 @@ export type BlockInsert = Omit<Block, "id" | "created_at" | "updated_at">;
 
 export type WeekInsert = Omit<Week, "id" | "created_at" | "updated_at">;
 
-export type DayInsert = Omit<Day, "id" | "created_at" | "updated_at">;
+export type DayInsert = Omit<Day, "id" | "created_at" | "updated_at" | "sleep_time" | "sleep_quality"> & {
+  sleep_time?: number | null;
+  sleep_quality?: number | null;
+};
 
 export type DayColumnInsert = Omit<DayColumn, "id" | "created_at" | "updated_at">;
 
@@ -125,6 +130,7 @@ export interface StatsSettings {
   sets_label: string;
   reps_label: string;
   weight_label: string;
+  rpe_label: string | null;
   created_at: string;
   updated_at: string;
 }
