@@ -1,19 +1,15 @@
 "use client";
 
-import {
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-} from "recharts";
+import { ResponsiveContainer, ComposedChart, Bar, XAxis, YAxis, Tooltip, Line, Dot } from "recharts";
 
 const LIFT_COLORS: Record<string, string> = {
-  squat: "hsl(263, 70%, 58%)",   // violet
-  bench: "hsl(190, 80%, 55%)",   // cyan
+  squat: "hsl(263, 70%, 58%)", // violet
+  bench: "hsl(190, 80%, 55%)", // cyan
   deadlift: "hsl(340, 75%, 55%)", // pink
 };
+
+// Optional color for residual line/dot
+const RESIDUAL_COLOR = "hsl(45, 90%, 55%)"; // amber-ish, visible on dark bg
 
 export interface FatigueDataPoint {
   label: string;
@@ -24,6 +20,9 @@ export interface FatigueDataPoint {
   sleepQuality: number | null;
   sleepTime: number | null;
   sleepAdjusted: boolean;
+
+  // ✅ NEW: allow residual fatigue field (optional for compatibility)
+  residualFatigue?: number;
 }
 
 interface FatigueChartProps {
@@ -51,51 +50,72 @@ function FatigueTooltip({ active, payload, label }: CustomTooltipProps) {
   const point = payload[0]?.payload as FatigueDataPoint | undefined;
   if (!point) return null;
 
+  // Filter out residual series from the stacked-lift list so we don’t show it as a “lift”
+  const liftEntries = payload.filter((p) => p.dataKey !== "residualFatigue" && p.dataKey !== "total");
+
   return (
-    <div
-      className="rounded-lg border border-border bg-background px-3 py-2 text-xs shadow-md"
-      style={{ minWidth: 140 }}
-    >
+    <div className="rounded-lg border border-border bg-background px-3 py-2 text-xs shadow-md" style={{ minWidth: 180 }}>
       <p className="font-medium text-foreground mb-1">{label}</p>
+
       <p className="text-muted-foreground mb-1">
-        Total: <span className="text-foreground font-medium">{Math.round(point.total)}</span>
-        {point.sleepAdjusted && (
-          <span className="text-muted-foreground ml-1">(sleep adj.)</span>
-        )}
+        Daily: <span className="text-foreground font-medium">{Math.round(point.total)}</span>
+        {point.sleepAdjusted && <span className="text-muted-foreground ml-1">(sleep adj.)</span>}
       </p>
-      {payload.map((entry) => (
-        entry.value > 0 && (
+
+      {typeof point.residualFatigue === "number" && (
+        <p className="text-muted-foreground mb-1">
+          Residual: <span className="text-foreground font-medium">{Math.round(point.residualFatigue)}</span>
+        </p>
+      )}
+
+      {liftEntries.map((entry) =>
+        entry.value > 0 ? (
           <p key={entry.dataKey} style={{ color: entry.color }}>
             {entry.name}: {Math.round(entry.value)}
           </p>
-        )
-      ))}
+        ) : null,
+      )}
+
       {point.sleepTime !== null && (
         <p className="text-muted-foreground mt-1">
-          Sleep: {point.sleepTime}h
-          {point.sleepQuality !== null && ` / ${point.sleepQuality}%`}
+          Sleep: {point.sleepTime}h{point.sleepQuality !== null && ` / ${point.sleepQuality}%`}
         </p>
       )}
     </div>
   );
 }
 
+function ResidualDot(props: any) {
+  const { cx, cy, index, payload } = props;
+
+  if (typeof payload?.residualFatigue !== "number") return null;
+
+  const isLast = index === props?.dataLength - 1;
+  if (!isLast) return null;
+
+  return <Dot cx={cx} cy={cy} r={4.5} fill={RESIDUAL_COLOR} stroke="hsl(240, 3.7%, 15.9%)" strokeWidth={1.5} />;
+}
+
 export function FatigueChart({ data, liftTypes }: FatigueChartProps) {
   if (data.length === 0 || liftTypes.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-border p-12 text-center">
-        <p className="text-sm text-muted-foreground">
-          No fatigue data to display. Ensure your RPE column is mapped and contains values.
-        </p>
+        <p className="text-sm text-muted-foreground">No fatigue data to display. Ensure your RPE column is mapped and contains values.</p>
       </div>
     );
   }
+
+  // Do we have any residual fatigue data?
+  const hasResidual = data.some((d) => typeof d.residualFatigue === "number");
+
+  // We need this so the custom dot can identify “last point”
+  const dataWithMeta = data.map((d) => d);
 
   return (
     <div className="overflow-x-auto">
       <div className="min-w-[400px]">
         <ResponsiveContainer width="100%" height={350}>
-          <BarChart data={data} margin={{ top: 5, right: 20, bottom: 30, left: 10 }}>
+          <ComposedChart data={dataWithMeta} margin={{ top: 5, right: 20, bottom: 30, left: 10 }}>
             <XAxis
               dataKey="label"
               tick={{ fontSize: 11, fill: "hsl(240, 5%, 64.9%)" }}
@@ -105,16 +125,11 @@ export function FatigueChart({ data, liftTypes }: FatigueChartProps) {
               textAnchor="end"
               height={60}
             />
-            <YAxis
-              tick={{ fontSize: 12, fill: "hsl(240, 5%, 64.9%)" }}
-              axisLine={{ stroke: "hsl(240, 3.7%, 15.9%)" }}
-              tickLine={false}
-              width={60}
-            />
-            <Tooltip
-              content={<FatigueTooltip />}
-              cursor={{ fill: "hsl(240, 3.7%, 15.9%)", opacity: 0.3 }}
-            />
+            <YAxis tick={{ fontSize: 12, fill: "hsl(240, 5%, 64.9%)" }} axisLine={{ stroke: "hsl(240, 3.7%, 15.9%)" }} tickLine={false} width={60} />
+
+            <Tooltip content={<FatigueTooltip />} cursor={{ fill: "hsl(240, 3.7%, 15.9%)", opacity: 0.3 }} />
+
+            {/* Stacked daily fatigue bars */}
             {liftTypes.map((liftType) => (
               <Bar
                 key={liftType}
@@ -125,7 +140,21 @@ export function FatigueChart({ data, liftTypes }: FatigueChartProps) {
                 radius={liftType === liftTypes[liftTypes.length - 1] ? [2, 2, 0, 0] : [0, 0, 0, 0]}
               />
             ))}
-          </BarChart>
+
+            {/* Residual fatigue line overlay (optional) */}
+            {hasResidual && (
+              <Line
+                type="monotone"
+                dataKey="residualFatigue"
+                name="Residual fatigue"
+                stroke={RESIDUAL_COLOR}
+                strokeWidth={2}
+                dot={(p) => <ResidualDot {...p} dataLength={data.length} />}
+                activeDot={{ r: 4 }}
+                connectNulls
+              />
+            )}
+          </ComposedChart>
         </ResponsiveContainer>
       </div>
     </div>

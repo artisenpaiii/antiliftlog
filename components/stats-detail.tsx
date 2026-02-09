@@ -53,6 +53,12 @@ const LIFT_MULTIPLIERS: Record<LiftType, number> = {
   deadlift: 1.6,
 };
 
+// Default daily decay of residual fatigue.
+// Interpretation: ~70% of yesterday’s fatigue carries into today (≈30% clears per 24h).
+// This produces a ~2-day half-life (0.70² ≈ 0.49), which matches typical 24–72h recovery
+// windows seen in heavy compound lifting (strength performance and neuromuscular recovery).
+const BASE_DECAY = 0.7;
+
 function classifyLift(exerciseName: string): LiftType | null {
   const lower = exerciseName.toLowerCase();
   if (lower.includes("deadlift") || lower.includes("dead lift")) return "deadlift";
@@ -73,9 +79,14 @@ function computeFatigueData(
     return { dataPoints: [], liftTypes: [] };
   }
 
-  for (const blockData of hierarchy.blocks) {
-    for (const weekData of blockData.weeks) {
-      for (const dayData of weekData.days) {
+  // Ensure chronological traversal (important for residual fatigue)
+  const sortedBlocks = [...hierarchy.blocks].sort((a, b) => a.block.order - b.block.order);
+  let residual = 0;
+  for (const blockData of sortedBlocks) {
+    const sortedWeeks = [...blockData.weeks].sort((a, b) => a.week.week_number - b.week.week_number);
+    for (const weekData of sortedWeeks) {
+      const sortedDays = [...weekData.days].sort((a, b) => a.day.day_number - b.day.day_number);
+      for (const dayData of sortedDays) {
         const label = `B${blockData.block.order + 1}W${weekData.week.week_number}D${dayData.day.day_number}`;
 
         const exerciseCol = dayData.columns.find((c) => c.label === settings.exercise_label);
@@ -101,27 +112,21 @@ function computeFatigueData(
 
             if (reps <= 0 || rpe <= 0) continue;
 
+            // ✅ Set fatigue: reps × max(RPE - 5, 0) × lift multiplier
             const effort = Math.max(rpe - 5, 0);
             const setFatigue = reps * effort * LIFT_MULTIPLIERS[liftType];
             dayScores[liftType] += setFatigue;
 
-            if (setFatigue > 0) {
-              activeLiftTypes.add(liftType);
-            }
+            if (setFatigue > 0) activeLiftTypes.add(liftType);
           }
         }
 
         let total = dayScores.squat + dayScores.bench + dayScores.deadlift;
         let sleepAdjusted = false;
 
-        // Sleep-based fatigue adjustment (optional, toggle-controlled).
-        // Sleep modifies recovery cost, not training stress itself.
-        // Factor = 0.85 + 0.30 × (quality / 100), producing a 0.85–1.15 range (±15%).
-        //  - quality  0 → 0.85× (impaired recovery, stress feels harder)
-        //  - quality 50 → 1.00× (neutral)
-        //  - quality 100 → 1.15× (well recovered, can tolerate more)
-        // Capped at ±15% because training load is the primary fatigue driver;
-        // sleep is a meaningful but secondary modifier.
+        // Sleep scaling you already implemented for daily fatigue (kept as-is).
+        // Note: conceptually this is "effective fatigue" (how expensive today felt),
+        // not pure mechanical stress. Residual below models carryover across days.
         if (sleepAdjustmentEnabled && dayData.day.sleep_quality !== null) {
           const clampedQuality = Math.max(0, Math.min(100, dayData.day.sleep_quality));
           const factor = 0.85 + 0.3 * (clampedQuality / 100);
@@ -132,22 +137,42 @@ function computeFatigueData(
           sleepAdjusted = true;
         }
 
+        // ✅ Residual fatigue: exponential carryover + today's fatigue
+        // Standard impulse-response / fitness-fatigue modeling uses exponential decay for fatigue.
+        // residual[t] = residual[t-1] * decay + dailyFatigue[t]
+        //
+        // Optional sleep influence on decay (scientifically correct place to apply sleep):
+        // better sleep → faster recovery → lower effective decay
+        // worse sleep → slower recovery → higher effective decay
+        let effectiveDecay = BASE_DECAY;
+
+        if (sleepAdjustmentEnabled && dayData.day.sleep_quality !== null) {
+          const q = Math.max(0, Math.min(100, dayData.day.sleep_quality));
+          const sleepFactor = 0.85 + 0.3 * (q / 100); // 0.85..1.15
+          effectiveDecay = BASE_DECAY / sleepFactor;
+
+          // Guard rails so decay stays sane
+          effectiveDecay = Math.max(0.55, Math.min(0.85, effectiveDecay));
+        }
+
+        residual = residual * effectiveDecay + total;
+
         dataPoints.push({
           label,
           total,
           squat: dayScores.squat,
           bench: dayScores.bench,
           deadlift: dayScores.deadlift,
+          residualFatigue: residual, // ✅ new field (extra prop is OK)
           sleepQuality: dayData.day.sleep_quality,
           sleepTime: dayData.day.sleep_time !== null ? Number(dayData.day.sleep_time) : null,
           sleepAdjusted,
-        });
+        } as FatigueDataPoint & { residualFatigue: number });
       }
     }
   }
 
   const liftTypes: LiftType[] = (["squat", "bench", "deadlift"] as const).filter((lt) => activeLiftTypes.has(lt));
-
   return { dataPoints, liftTypes };
 }
 
@@ -617,6 +642,32 @@ export function StatsDetail({ program, onBack }: StatsDetailProps) {
                             </div>
                             <p className="text-muted-foreground">
                               Capped at ±15% — training load stays the primary driver. One bad night won&apos;t invalidate your data.
+                            </p>
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <p className="font-medium text-foreground">Residual fatigue (carryover)</p>
+                            <p className="text-muted-foreground">
+                              Daily bars show fatigue added that day. Residual fatigue shows how much you’re still carrying into the next day. It uses
+                              exponential decay (the standard model in sport science for fatigue recovery):
+                            </p>
+                            <div className="rounded-md bg-muted/50 px-2.5 py-2 space-y-1 text-muted-foreground">
+                              <p>
+                                <span className="text-foreground">Residual[t]</span> = Residual[t−1] × <span className="text-foreground">decay</span> +
+                                DailyFatigue[t]
+                              </p>
+                              <p>
+                                Default <span className="text-foreground">decay = 0.70</span> → about <span className="text-foreground">70%</span> of
+                                yesterday’s fatigue carries forward, meaning roughly <span className="text-foreground">30%</span> clears per 24h.
+                              </p>
+                              <p>
+                                This implies a ~2 day half-life (<span className="text-foreground">0.70² ≈ 0.49</span>), which matches typical 24–72h recovery
+                                windows seen after heavy compound lifting (strength/performance readiness often rebounds over a few days).
+                              </p>
+                            </div>
+                            <p className="text-muted-foreground">
+                              If sleep adjustment is enabled, sleep also influences recovery rate by adjusting decay: better sleep lowers decay (faster
+                              recovery), worse sleep raises decay (slower recovery).
                             </p>
                           </div>
 
