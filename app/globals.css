@@ -35,8 +35,29 @@
 @layer base {
   * {
     @apply border-border;
+    -webkit-tap-highlight-color: transparent;
+  }
+  html {
+    -webkit-text-size-adjust: 100%;
+    overscroll-behavior: none;
   }
   body {
     @apply bg-background text-foreground;
+    overscroll-behavior: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  /* Allow text selection in inputs and textareas */
+  input,
+  textarea,
+  [contenteditable="true"] {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+  /* Prevent iOS zoom on input focus — inputs must be >= 16px */
+  input,
+  select,
+  textarea {
+    font-size: 16px;
   }
 }
