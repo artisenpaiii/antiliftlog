@@ -60,4 +60,11 @@
   textarea {
     font-size: 16px;
   }
+  /* Constrain date/time inputs to not overflow their container */
+  input[type="date"],
+  input[type="time"],
+  input[type="datetime-local"] {
+    max-width: 100%;
+    min-width: 0;
+  }
 }
