@@ -13,6 +13,7 @@ import type { FatigueDataPoint } from "@/components/fatigue-chart";
 import { createClient } from "@/lib/supabase/client";
 import { createTables } from "@/lib/db";
 import type { Program, Block, Week, Day, DayColumn, DayRow, StatsSettings } from "@/lib/types/database";
+import { WEEKDAY_SHORT_LABELS } from "@/lib/types/database";
 
 interface StatsDetailProps {
   program: Program;
@@ -41,6 +42,19 @@ interface WeekDataPoint {
 function parseNumber(value: string | undefined): number {
   if (!value) return 0;
   const cleaned = value.replace(/[^0-9.,-]/g, "").replace(",", ".");
+  const num = parseFloat(cleaned);
+  return isNaN(num) ? 0 : num;
+}
+
+function parseRpe(value: string | undefined): number {
+  if (!value) return 0;
+  const cleaned = value.replace(/[^0-9.,-]/g, "").replace(",", ".");
+  // Handle ranges like "6-7.5" by taking the upper bound
+  const parts = cleaned.split("-").filter((p) => p !== "");
+  if (parts.length >= 2) {
+    const upper = parseFloat(parts[parts.length - 1]);
+    return isNaN(upper) ? 0 : upper;
+  }
   const num = parseFloat(cleaned);
   return isNaN(num) ? 0 : num;
 }
@@ -82,12 +96,35 @@ function computeFatigueData(
   // Ensure chronological traversal (important for residual fatigue)
   const sortedBlocks = [...hierarchy.blocks].sort((a, b) => a.block.order - b.block.order);
   let residual = 0;
-  for (const blockData of sortedBlocks) {
+
+  // Track previous day's position for gap-aware decay
+  let prevWeekDayIndex: number | null = null;
+  let prevAbsoluteWeek: number | null = null;
+  let absoluteWeekOffset = 0;
+  let lastBlockIdx = -1;
+
+  for (let blockIdx = 0; blockIdx < sortedBlocks.length; blockIdx++) {
+    const blockData = sortedBlocks[blockIdx];
+
+    // At each block boundary, accumulate week offset
+    if (blockIdx !== lastBlockIdx) {
+      if (lastBlockIdx >= 0) {
+        const prevBlock = sortedBlocks[lastBlockIdx];
+        const prevBlockWeekCount = prevBlock.weeks.length;
+        absoluteWeekOffset += prevBlockWeekCount;
+      }
+      lastBlockIdx = blockIdx;
+    }
+
     const sortedWeeks = [...blockData.weeks].sort((a, b) => a.week.week_number - b.week.week_number);
     for (const weekData of sortedWeeks) {
       const sortedDays = [...weekData.days].sort((a, b) => a.day.day_number - b.day.day_number);
+      const currentAbsoluteWeek = absoluteWeekOffset + weekData.week.week_number;
+
       for (const dayData of sortedDays) {
-        const label = `B${blockData.block.order + 1}W${weekData.week.week_number}D${dayData.day.day_number}`;
+        const label = dayData.day.week_day_index !== null && dayData.day.week_day_index !== undefined
+          ? `${WEEKDAY_SHORT_LABELS[dayData.day.week_day_index]} B${blockData.block.order + 1}W${weekData.week.week_number}`
+          : `B${blockData.block.order + 1}W${weekData.week.week_number}D${dayData.day.day_number}`;
 
         const exerciseCol = dayData.columns.find((c) => c.label === settings.exercise_label);
         const repsCol = dayData.columns.find((c) => c.label === settings.reps_label);
@@ -108,7 +145,7 @@ function computeFatigueData(
             if (!liftType) continue;
 
             const reps = parseNumber(row.cells[repsCol.id]);
-            const rpe = parseNumber(row.cells[rpeCol.id]);
+            const rpe = parseRpe(row.cells[rpeCol.id]);
 
             if (reps <= 0 || rpe <= 0) continue;
 
@@ -155,7 +192,27 @@ function computeFatigueData(
           effectiveDecay = Math.max(0.55, Math.min(0.85, effectiveDecay));
         }
 
-        residual = residual * effectiveDecay + total;
+        // Compute gap between training days for rest-day aware decay
+        let decayGap = 1; // fallback for null indices (current behavior)
+        if (
+          prevWeekDayIndex !== null &&
+          prevAbsoluteWeek !== null &&
+          dayData.day.week_day_index !== null &&
+          dayData.day.week_day_index !== undefined
+        ) {
+          const weeksBetween = currentAbsoluteWeek - prevAbsoluteWeek;
+          const indexDiff = dayData.day.week_day_index - prevWeekDayIndex;
+          const computedGap = weeksBetween * 7 + indexDiff;
+          if (computedGap > 0) decayGap = computedGap;
+        }
+
+        residual = residual * Math.pow(effectiveDecay, decayGap) + total;
+
+        // Update tracking for next iteration
+        if (dayData.day.week_day_index !== null && dayData.day.week_day_index !== undefined) {
+          prevWeekDayIndex = dayData.day.week_day_index;
+          prevAbsoluteWeek = currentAbsoluteWeek;
+        }
 
         dataPoints.push({
           label,

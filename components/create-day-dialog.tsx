@@ -7,6 +7,7 @@ import { createTables } from "@/lib/db";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -16,6 +17,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import type { Day, DayColumn } from "@/lib/types/database";
+import { WEEKDAY_LABELS } from "@/lib/types/database";
 
 interface CreateDayDialogProps {
   open: boolean;
@@ -35,6 +37,7 @@ export function CreateDayDialog({
   onDayCreated,
 }: CreateDayDialogProps) {
   const [dayName, setDayName] = useState("");
+  const [weekDayIndex, setWeekDayIndex] = useState("__none__");
   const [columns, setColumns] = useState<string[]>(suggestedColumns);
   const [newColumn, setNewColumn] = useState("");
   const [isCreating, setIsCreating] = useState(false);
@@ -44,6 +47,7 @@ export function CreateDayDialog({
     onOpenChange(next);
     if (!next) {
       setDayName("");
+      setWeekDayIndex("__none__");
       setColumns(suggestedColumns);
       setNewColumn("");
       setError(null);
@@ -95,6 +99,7 @@ export function CreateDayDialog({
       week_id: weekId,
       day_number: nextDayNumber,
       name: dayName.trim() || null,
+      week_day_index: weekDayIndex === "__none__" ? null : parseInt(weekDayIndex, 10),
     });
 
     if (dayError || !day) {
@@ -145,6 +150,23 @@ export function CreateDayDialog({
                 className="mt-2"
                 autoFocus
               />
+            </div>
+
+            <div>
+              <Label>Weekday (optional)</Label>
+              <Select value={weekDayIndex} onValueChange={setWeekDayIndex}>
+                <SelectTrigger className="mt-2">
+                  <SelectValue placeholder="None" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">None</SelectItem>
+                  {Object.entries(WEEKDAY_LABELS).map(([idx, label]) => (
+                    <SelectItem key={idx} value={idx}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div>

@@ -390,3 +390,10 @@ with check (
 -- =========================
 
 ALTER TABLE public.stats_settings ADD COLUMN rpe_label varchar;
+
+-- =========================
+-- MIGRATION: Add week_day_index to days
+-- =========================
+
+ALTER TABLE public.days ADD COLUMN week_day_index integer;
+ALTER TABLE public.days ADD CONSTRAINT week_day_index_range CHECK (week_day_index BETWEEN 0 AND 6);

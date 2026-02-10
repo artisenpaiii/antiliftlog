@@ -292,6 +292,7 @@ export function BlockCacheProvider({
           week_id: newWeek.id,
           day_number: day.day_number,
           name: day.name,
+          week_day_index: day.week_day_index,
         });
         if (!newDay) continue;
 

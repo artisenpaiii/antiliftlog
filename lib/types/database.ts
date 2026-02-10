@@ -34,9 +34,19 @@ export interface Day {
   name: string | null;
   sleep_time: number | null;
   sleep_quality: number | null;
+  week_day_index: number | null;
   created_at: string;
   updated_at: string;
 }
+
+export const WEEKDAY_LABELS: Record<number, string> = {
+  0: "Monday", 1: "Tuesday", 2: "Wednesday", 3: "Thursday",
+  4: "Friday", 5: "Saturday", 6: "Sunday",
+};
+
+export const WEEKDAY_SHORT_LABELS: Record<number, string> = {
+  0: "Mon", 1: "Tue", 2: "Wed", 3: "Thu", 4: "Fri", 5: "Sat", 6: "Sun",
+};
 
 export interface DayColumn {
   id: string;
@@ -95,9 +105,10 @@ export type BlockInsert = Omit<Block, "id" | "created_at" | "updated_at">;
 
 export type WeekInsert = Omit<Week, "id" | "created_at" | "updated_at">;
 
-export type DayInsert = Omit<Day, "id" | "created_at" | "updated_at" | "sleep_time" | "sleep_quality"> & {
+export type DayInsert = Omit<Day, "id" | "created_at" | "updated_at" | "sleep_time" | "sleep_quality" | "week_day_index"> & {
   sleep_time?: number | null;
   sleep_quality?: number | null;
+  week_day_index?: number | null;
 };
 
 export type DayColumnInsert = Omit<DayColumn, "id" | "created_at" | "updated_at">;

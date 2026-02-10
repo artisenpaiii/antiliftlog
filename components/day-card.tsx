@@ -14,9 +14,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DayGrid } from "@/components/day-grid";
 import { useBlockCache } from "@/lib/contexts/block-cache-context";
 import type { Day } from "@/lib/types/database";
+import { WEEKDAY_SHORT_LABELS } from "@/lib/types/database";
 
 function decimalToTimeStr(decimal: number): string {
   const hours = Math.floor(decimal);
@@ -172,15 +174,24 @@ export function DayCard({ day }: DayCardProps) {
     updateRowCells(day.id, rowId, cells);
   }
 
-  const dayLabel = day.name ?? `Day ${day.day_number}`;
+  const dayLabel = day.week_day_index !== null && day.week_day_index !== undefined
+    ? `${WEEKDAY_SHORT_LABELS[day.week_day_index]} - ${day.name ?? `Day ${day.day_number}`}`
+    : day.name ?? `Day ${day.day_number}`;
 
   return (
     <div className="rounded-lg border border-border">
-      <button
-        type="button"
+      <div
+        role="button"
+        tabIndex={0}
         onClick={() => toggleDay(day.id)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            toggleDay(day.id);
+          }
+        }}
         className={cn(
-          "flex w-full items-center gap-2 px-4 py-3 text-left transition-colors hover:bg-muted/50",
+          "flex w-full items-center gap-2 px-4 py-3 text-left transition-colors hover:bg-muted/50 cursor-pointer",
           expanded && "border-b border-border",
         )}
       >
@@ -192,6 +203,31 @@ export function DayCard({ day }: DayCardProps) {
           )}
         />
         <h4 className="text-sm font-medium flex-1">{dayLabel}</h4>
+        <div
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+          role="presentation"
+        >
+          <Select
+            value={day.week_day_index !== null && day.week_day_index !== undefined ? String(day.week_day_index) : "__none__"}
+            onValueChange={(val) => {
+              const idx = val === "__none__" ? null : parseInt(val, 10);
+              updateDay(day.id, { week_day_index: idx });
+            }}
+          >
+            <SelectTrigger className="h-7 w-[72px] text-xs px-2 border-none bg-transparent hover:bg-muted">
+              <SelectValue placeholder="Day" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__">—</SelectItem>
+              {Object.entries(WEEKDAY_SHORT_LABELS).map(([idx, label]) => (
+                <SelectItem key={idx} value={idx}>
+                  {label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
         <span className="text-xs text-muted-foreground">
           {rows.length} {rows.length === 1 ? "row" : "rows"}
         </span>
@@ -234,7 +270,7 @@ export function DayCard({ day }: DayCardProps) {
         >
           <Trash2 size={14} />
         </span>
-      </button>
+      </div>
 
       {expanded && (
         <>
