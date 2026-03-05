@@ -15,6 +15,7 @@ export interface Block {
   program_id: string;
   name: string;
   order: number;
+  start_date: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -101,7 +102,9 @@ export interface Competition {
 
 export type ProgramInsert = Omit<Program, "id" | "created_at" | "updated_at">;
 
-export type BlockInsert = Omit<Block, "id" | "created_at" | "updated_at">;
+export type BlockInsert = Omit<Block, "id" | "created_at" | "updated_at" | "start_date"> & {
+  start_date?: string | null;
+};
 
 export type WeekInsert = Omit<Week, "id" | "created_at" | "updated_at">;
 

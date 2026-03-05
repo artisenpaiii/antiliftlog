@@ -9,6 +9,7 @@ import { createTables } from "@/lib/db";
 import { BlockSidebar } from "@/components/block-sidebar";
 import { BlockDetail } from "@/components/block-detail";
 import { InlineEdit } from "@/components/inline-edit";
+import { ExportForAiButton } from "@/components/export-for-ai-button";
 import type { Program, Block } from "@/lib/types/database";
 
 interface ProgramDetailProps {
@@ -58,7 +59,10 @@ export function ProgramDetail({ program, initialBlocks }: ProgramDetailProps) {
           <ArrowLeft size={14} />
           Programs
         </Link>
-        <InlineEdit value={programName} onSave={handleProgramRename} className="text-2xl font-semibold tracking-tight" />
+        <div className="flex items-center gap-2">
+          <InlineEdit value={programName} onSave={handleProgramRename} className="text-2xl font-semibold tracking-tight" />
+          <ExportForAiButton program={program} />
+        </div>
       </div>
 
       <div className="flex min-h-0 flex-1 rounded-lg border bg-card">

@@ -9,281 +9,15 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { VolumeChart } from "@/components/volume-chart";
 import { FatigueChart } from "@/components/fatigue-chart";
-import type { FatigueDataPoint } from "@/components/fatigue-chart";
 import { createClient } from "@/lib/supabase/client";
 import { createTables } from "@/lib/db";
-import type { Program, Block, Week, Day, DayColumn, DayRow, StatsSettings } from "@/lib/types/database";
-import { WEEKDAY_SHORT_LABELS } from "@/lib/types/database";
+import type { Program, StatsSettings } from "@/lib/types/database";
+import { computeVolumeData, computeFatigueData, loadProgramHierarchy } from "@/lib/stats";
+import type { ProgramHierarchy } from "@/lib/stats";
 
 interface StatsDetailProps {
   program: Program;
   onBack: () => void;
-}
-
-interface ProgramHierarchy {
-  blocks: Array<{
-    block: Block;
-    weeks: Array<{
-      week: Week;
-      days: Array<{
-        day: Day;
-        columns: DayColumn[];
-        rows: DayRow[];
-      }>;
-    }>;
-  }>;
-}
-
-interface WeekDataPoint {
-  label: string;
-  [exerciseName: string]: number | string;
-}
-
-function parseNumber(value: string | undefined): number {
-  if (!value) return 0;
-  const cleaned = value.replace(/[^0-9.,-]/g, "").replace(",", ".");
-  const num = parseFloat(cleaned);
-  return isNaN(num) ? 0 : num;
-}
-
-function parseRpe(value: string | undefined): number {
-  if (!value) return 0;
-  const cleaned = value.replace(/[^0-9.,-]/g, "").replace(",", ".");
-  // Handle ranges like "6-7.5" by taking the upper bound
-  const parts = cleaned.split("-").filter((p) => p !== "");
-  if (parts.length >= 2) {
-    const upper = parseFloat(parts[parts.length - 1]);
-    return isNaN(upper) ? 0 : upper;
-  }
-  const num = parseFloat(cleaned);
-  return isNaN(num) ? 0 : num;
-}
-
-type LiftType = "squat" | "bench" | "deadlift";
-
-const LIFT_MULTIPLIERS: Record<LiftType, number> = {
-  bench: 1.0,
-  squat: 1.3,
-  deadlift: 1.6,
-};
-
-// Default daily decay of residual fatigue.
-// Interpretation: ~70% of yesterday’s fatigue carries into today (≈30% clears per 24h).
-// This produces a ~2-day half-life (0.70² ≈ 0.49), which matches typical 24–72h recovery
-// windows seen in heavy compound lifting (strength performance and neuromuscular recovery).
-const BASE_DECAY = 0.7;
-
-function classifyLift(exerciseName: string): LiftType | null {
-  const lower = exerciseName.toLowerCase();
-  if (lower.includes("deadlift") || lower.includes("dead lift")) return "deadlift";
-  if (lower.includes("squat")) return "squat";
-  if (lower.includes("bench")) return "bench";
-  return null;
-}
-
-function computeFatigueData(
-  hierarchy: ProgramHierarchy,
-  settings: StatsSettings,
-  sleepAdjustmentEnabled: boolean,
-): { dataPoints: FatigueDataPoint[]; liftTypes: LiftType[] } {
-  const dataPoints: FatigueDataPoint[] = [];
-  const activeLiftTypes = new Set<LiftType>();
-
-  if (!settings.rpe_label) {
-    return { dataPoints: [], liftTypes: [] };
-  }
-
-  // Ensure chronological traversal (important for residual fatigue)
-  const sortedBlocks = [...hierarchy.blocks].sort((a, b) => a.block.order - b.block.order);
-  let residual = 0;
-
-  // Track previous day's position for gap-aware decay
-  let prevWeekDayIndex: number | null = null;
-  let prevAbsoluteWeek: number | null = null;
-  let absoluteWeekOffset = 0;
-  let lastBlockIdx = -1;
-
-  for (let blockIdx = 0; blockIdx < sortedBlocks.length; blockIdx++) {
-    const blockData = sortedBlocks[blockIdx];
-
-    // At each block boundary, accumulate week offset
-    if (blockIdx !== lastBlockIdx) {
-      if (lastBlockIdx >= 0) {
-        const prevBlock = sortedBlocks[lastBlockIdx];
-        const prevBlockWeekCount = prevBlock.weeks.length;
-        absoluteWeekOffset += prevBlockWeekCount;
-      }
-      lastBlockIdx = blockIdx;
-    }
-
-    const sortedWeeks = [...blockData.weeks].sort((a, b) => a.week.week_number - b.week.week_number);
-    for (const weekData of sortedWeeks) {
-      const sortedDays = [...weekData.days].sort((a, b) => a.day.day_number - b.day.day_number);
-      const currentAbsoluteWeek = absoluteWeekOffset + weekData.week.week_number;
-
-      for (const dayData of sortedDays) {
-        const label = dayData.day.week_day_index !== null && dayData.day.week_day_index !== undefined
-          ? `${WEEKDAY_SHORT_LABELS[dayData.day.week_day_index]} B${blockData.block.order + 1}W${weekData.week.week_number}`
-          : `B${blockData.block.order + 1}W${weekData.week.week_number}D${dayData.day.day_number}`;
-
-        const exerciseCol = dayData.columns.find((c) => c.label === settings.exercise_label);
-        const repsCol = dayData.columns.find((c) => c.label === settings.reps_label);
-        const rpeCol = dayData.columns.find((c) => c.label === settings.rpe_label);
-
-        const dayScores: Record<LiftType, number> = {
-          squat: 0,
-          bench: 0,
-          deadlift: 0,
-        };
-
-        if (exerciseCol && repsCol && rpeCol) {
-          for (const row of dayData.rows) {
-            const exercise = row.cells[exerciseCol.id]?.trim();
-            if (!exercise) continue;
-
-            const liftType = classifyLift(exercise);
-            if (!liftType) continue;
-
-            const reps = parseNumber(row.cells[repsCol.id]);
-            const rpe = parseRpe(row.cells[rpeCol.id]);
-
-            if (reps <= 0 || rpe <= 0) continue;
-
-            // ✅ Set fatigue: reps × max(RPE - 5, 0) × lift multiplier
-            const effort = Math.max(rpe - 5, 0);
-            const setFatigue = reps * effort * LIFT_MULTIPLIERS[liftType];
-            dayScores[liftType] += setFatigue;
-
-            if (setFatigue > 0) activeLiftTypes.add(liftType);
-          }
-        }
-
-        let total = dayScores.squat + dayScores.bench + dayScores.deadlift;
-        let sleepAdjusted = false;
-
-        // Sleep scaling you already implemented for daily fatigue (kept as-is).
-        // Note: conceptually this is "effective fatigue" (how expensive today felt),
-        // not pure mechanical stress. Residual below models carryover across days.
-        if (sleepAdjustmentEnabled && dayData.day.sleep_quality !== null) {
-          const clampedQuality = Math.max(0, Math.min(100, dayData.day.sleep_quality));
-          const factor = 0.85 + 0.3 * (clampedQuality / 100);
-          dayScores.squat *= factor;
-          dayScores.bench *= factor;
-          dayScores.deadlift *= factor;
-          total = dayScores.squat + dayScores.bench + dayScores.deadlift;
-          sleepAdjusted = true;
-        }
-
-        // ✅ Residual fatigue: exponential carryover + today's fatigue
-        // Standard impulse-response / fitness-fatigue modeling uses exponential decay for fatigue.
-        // residual[t] = residual[t-1] * decay + dailyFatigue[t]
-        //
-        // Optional sleep influence on decay (scientifically correct place to apply sleep):
-        // better sleep → faster recovery → lower effective decay
-        // worse sleep → slower recovery → higher effective decay
-        let effectiveDecay = BASE_DECAY;
-
-        if (sleepAdjustmentEnabled && dayData.day.sleep_quality !== null) {
-          const q = Math.max(0, Math.min(100, dayData.day.sleep_quality));
-          const sleepFactor = 0.85 + 0.3 * (q / 100); // 0.85..1.15
-          effectiveDecay = BASE_DECAY / sleepFactor;
-
-          // Guard rails so decay stays sane
-          effectiveDecay = Math.max(0.55, Math.min(0.85, effectiveDecay));
-        }
-
-        // Compute gap between training days for rest-day aware decay
-        let decayGap = 1; // fallback for null indices (current behavior)
-        if (
-          prevWeekDayIndex !== null &&
-          prevAbsoluteWeek !== null &&
-          dayData.day.week_day_index !== null &&
-          dayData.day.week_day_index !== undefined
-        ) {
-          const weeksBetween = currentAbsoluteWeek - prevAbsoluteWeek;
-          const indexDiff = dayData.day.week_day_index - prevWeekDayIndex;
-          const computedGap = weeksBetween * 7 + indexDiff;
-          if (computedGap > 0) decayGap = computedGap;
-        }
-
-        residual = residual * Math.pow(effectiveDecay, decayGap) + total;
-
-        // Update tracking for next iteration
-        if (dayData.day.week_day_index !== null && dayData.day.week_day_index !== undefined) {
-          prevWeekDayIndex = dayData.day.week_day_index;
-          prevAbsoluteWeek = currentAbsoluteWeek;
-        }
-
-        dataPoints.push({
-          label,
-          total,
-          squat: dayScores.squat,
-          bench: dayScores.bench,
-          deadlift: dayScores.deadlift,
-          residualFatigue: residual, // ✅ new field (extra prop is OK)
-          sleepQuality: dayData.day.sleep_quality,
-          sleepTime: dayData.day.sleep_time !== null ? Number(dayData.day.sleep_time) : null,
-          sleepAdjusted,
-        } as FatigueDataPoint & { residualFatigue: number });
-      }
-    }
-  }
-
-  const liftTypes: LiftType[] = (["squat", "bench", "deadlift"] as const).filter((lt) => activeLiftTypes.has(lt));
-  return { dataPoints, liftTypes };
-}
-
-function computeVolumeData(hierarchy: ProgramHierarchy, settings: StatsSettings): { dataPoints: WeekDataPoint[]; exercises: string[] } {
-  const exerciseVolumes: Record<string, Record<string, number>> = {};
-  const weekLabels: string[] = [];
-
-  for (const blockData of hierarchy.blocks) {
-    for (const weekData of blockData.weeks) {
-      const label = `B${blockData.block.order + 1}W${weekData.week.week_number}`;
-      weekLabels.push(label);
-
-      for (const dayData of weekData.days) {
-        const exerciseCol = dayData.columns.find((c) => c.label === settings.exercise_label);
-        const setsCol = dayData.columns.find((c) => c.label === settings.sets_label);
-        const repsCol = dayData.columns.find((c) => c.label === settings.reps_label);
-        const weightCol = dayData.columns.find((c) => c.label === settings.weight_label);
-
-        if (!exerciseCol || !setsCol || !repsCol || !weightCol) continue;
-
-        for (const row of dayData.rows) {
-          const exercise = row.cells[exerciseCol.id]?.trim();
-          if (!exercise) continue;
-
-          const sets = parseNumber(row.cells[setsCol.id]);
-          const reps = parseNumber(row.cells[repsCol.id]);
-          const weight = parseNumber(row.cells[weightCol.id]);
-          const volume = sets * reps * weight;
-
-          if (volume <= 0) continue;
-
-          if (!exerciseVolumes[exercise]) {
-            exerciseVolumes[exercise] = {};
-          }
-          exerciseVolumes[exercise][label] = (exerciseVolumes[exercise][label] ?? 0) + volume;
-        }
-      }
-    }
-  }
-
-  const exercises = Object.keys(exerciseVolumes).sort();
-
-  const dataPoints: WeekDataPoint[] = weekLabels.map((label) => {
-    const point: WeekDataPoint = { label };
-    for (const exercise of exercises) {
-      const vol = exerciseVolumes[exercise][label];
-      if (vol !== undefined) {
-        point[exercise] = vol;
-      }
-    }
-    return point;
-  });
-
-  return { dataPoints, exercises };
 }
 
 export function StatsDetail({ program, onBack }: StatsDetailProps) {
@@ -314,42 +48,7 @@ export function StatsDetail({ program, onBack }: StatsDetailProps) {
     const supabase = createClient();
     const tables = createTables(supabase);
 
-    // Fetch settings and blocks in parallel
-    const [settingsResult, blocksResult] = await Promise.all([tables.statsSettings.findByProgramId(program.id), tables.blocks.findByProgramId(program.id)]);
-
-    const fetchedSettings = settingsResult.data ?? null;
-    const blocks = blocksResult.data ?? [];
-
-    // Build hierarchy
-    const blockDataArr: ProgramHierarchy["blocks"] = [];
-    const allLabels = new Set<string>();
-
-    for (const block of blocks) {
-      const { data: weeks } = await tables.weeks.findByBlockId(block.id);
-      const weekDataArr: ProgramHierarchy["blocks"][number]["weeks"] = [];
-
-      for (const week of weeks ?? []) {
-        const { data: days } = await tables.days.findByWeekId(week.id);
-        const dayDataArr: ProgramHierarchy["blocks"][number]["weeks"][number]["days"] = [];
-
-        const dayFetches = (days ?? []).map(async (day) => {
-          const [colResult, rowResult] = await Promise.all([tables.dayColumns.findByDayId(day.id), tables.dayRows.findByDayId(day.id)]);
-          const columns = colResult.data ?? [];
-          const rows = rowResult.data ?? [];
-          columns.forEach((c) => allLabels.add(c.label));
-          return { day, columns, rows };
-        });
-
-        const resolvedDays = await Promise.all(dayFetches);
-        dayDataArr.push(...resolvedDays);
-        weekDataArr.push({ week, days: dayDataArr });
-      }
-
-      blockDataArr.push({ block, weeks: weekDataArr });
-    }
-
-    const builtHierarchy: ProgramHierarchy = { blocks: blockDataArr };
-    const labels = Array.from(allLabels).sort();
+    const { hierarchy: builtHierarchy, columnLabels: labels, settings: fetchedSettings } = await loadProgramHierarchy(tables, program.id);
 
     setSettings(fetchedSettings);
     setHierarchy(builtHierarchy);
@@ -396,9 +95,13 @@ export function StatsDetail({ program, onBack }: StatsDetailProps) {
     return { fatigueDataPoints: result.dataPoints, activeLiftTypes: result.liftTypes };
   }, [hierarchy, settings, sleepAdjustmentEnabled]);
 
-  // Reset selected exercises when allExercises changes
+  // Reset selected exercises when allExercises changes — big three always on by default
   useEffect(() => {
-    setSelectedExercises(allExercises.slice(0, 5));
+    const bigThree = allExercises.filter((e) => {
+      const lower = e.toLowerCase();
+      return lower.includes("squat") || lower.includes("bench") || lower.includes("deadlift") || lower.includes("dead lift");
+    });
+    setSelectedExercises(bigThree.length > 0 ? bigThree : allExercises.slice(0, 5));
   }, [allExercises]);
 
   function toggleExercise(exercise: string) {

@@ -45,13 +45,15 @@ export function BlockSidebar({
 }: BlockSidebarProps) {
   const [createOpen, setCreateOpen] = useState(false);
   const [name, setName] = useState("");
+  const [startDate, setStartDate] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Rename state
+  // Edit state
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameTarget, setRenameTarget] = useState<Block | null>(null);
   const [renameName, setRenameName] = useState("");
+  const [renameStartDate, setRenameStartDate] = useState("");
   const [isRenaming, setIsRenaming] = useState(false);
   const [renameError, setRenameError] = useState<string | null>(null);
 
@@ -75,6 +77,7 @@ export function BlockSidebar({
       program_id: programId,
       name: trimmed,
       order: blocks.length,
+      start_date: startDate || null,
     });
 
     if (createError || !data) {
@@ -86,6 +89,7 @@ export function BlockSidebar({
     setCreateOpen(false);
     setIsCreating(false);
     setName("");
+    setStartDate("");
     onBlockCreated(data);
   }
 
@@ -93,6 +97,7 @@ export function BlockSidebar({
     setCreateOpen(open);
     if (!open) {
       setName("");
+      setStartDate("");
       setError(null);
     }
   }
@@ -100,6 +105,7 @@ export function BlockSidebar({
   function openRename(block: Block) {
     setRenameTarget(block);
     setRenameName(block.name);
+    setRenameStartDate(block.start_date ?? "");
     setRenameError(null);
     setRenameOpen(true);
   }
@@ -109,7 +115,13 @@ export function BlockSidebar({
     if (!renameTarget) return;
 
     const trimmed = renameName.trim();
-    if (!trimmed || trimmed === renameTarget.name) {
+    if (!trimmed) return;
+
+    const newStartDate = renameStartDate || null;
+    const nameUnchanged = trimmed === renameTarget.name;
+    const dateUnchanged = newStartDate === (renameTarget.start_date ?? null);
+
+    if (nameUnchanged && dateUnchanged) {
       setRenameOpen(false);
       return;
     }
@@ -121,6 +133,7 @@ export function BlockSidebar({
     const tables = createTables(supabase);
     const { data, error } = await tables.blocks.update(renameTarget.id, {
       name: trimmed,
+      start_date: newStartDate,
     });
 
     if (error || !data) {
@@ -220,7 +233,7 @@ export function BlockSidebar({
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem onClick={() => openRename(block)}>
                     <Pencil size={14} />
-                    Rename
+                    Edit
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={() => openDelete(block)}
@@ -246,16 +259,28 @@ export function BlockSidebar({
                 Add a new training block to this program.
               </DialogDescription>
             </DialogHeader>
-            <div className="py-4">
-              <Label htmlFor="block-name">Block name</Label>
-              <Input
-                id="block-name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Hypertrophy Phase"
-                className="mt-2"
-                autoFocus
-              />
+            <div className="py-4 space-y-4">
+              <div>
+                <Label htmlFor="block-name">Block name</Label>
+                <Input
+                  id="block-name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="e.g. Hypertrophy Phase"
+                  className="mt-2"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <Label htmlFor="block-start-date">Start date (optional)</Label>
+                <Input
+                  id="block-start-date"
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="mt-2"
+                />
+              </div>
               {error && (
                 <p className="text-destructive text-sm mt-2">{error}</p>
               )}
@@ -276,25 +301,37 @@ export function BlockSidebar({
         </DialogContent>
       </Dialog>
 
-      {/* Rename Block Dialog */}
+      {/* Edit Block Dialog */}
       <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
         <DialogContent>
           <form onSubmit={handleRename}>
             <DialogHeader>
-              <DialogTitle>Rename Block</DialogTitle>
+              <DialogTitle>Edit Block</DialogTitle>
               <DialogDescription>
-                Enter a new name for this block.
+                Update the name or start date for this block.
               </DialogDescription>
             </DialogHeader>
-            <div className="py-4">
-              <Label htmlFor="rename-block-name">Block name</Label>
-              <Input
-                id="rename-block-name"
-                value={renameName}
-                onChange={(e) => setRenameName(e.target.value)}
-                className="mt-2"
-                autoFocus
-              />
+            <div className="py-4 space-y-4">
+              <div>
+                <Label htmlFor="rename-block-name">Block name</Label>
+                <Input
+                  id="rename-block-name"
+                  value={renameName}
+                  onChange={(e) => setRenameName(e.target.value)}
+                  className="mt-2"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <Label htmlFor="rename-block-start-date">Start date (optional)</Label>
+                <Input
+                  id="rename-block-start-date"
+                  type="date"
+                  value={renameStartDate}
+                  onChange={(e) => setRenameStartDate(e.target.value)}
+                  className="mt-2"
+                />
+              </div>
               {renameError && (
                 <p className="text-destructive text-sm mt-2">{renameError}</p>
               )}
