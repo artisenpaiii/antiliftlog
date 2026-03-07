@@ -43,7 +43,7 @@ interface BlockCacheContextValue {
 
   addColumn(dayId: string, insert: DayColumnInsert): Promise<DayColumn | null>;
   deleteColumn(dayId: string, colId: string): Promise<boolean>;
-  reorderColumns(dayId: string, reordered: DayColumn[]): void;
+  reorderColumns(dayId: string, reordered: DayColumn[], onError?: () => void): void;
 
   addRow(dayId: string, insert: DayRowInsert): Promise<DayRow | null>;
   deleteRow(dayId: string, rowId: string): Promise<boolean>;
@@ -52,7 +52,7 @@ interface BlockCacheContextValue {
     rowId: string,
     cells: Record<string, string>,
   ): Promise<boolean>;
-  reorderRows(dayId: string, reordered: DayRow[]): void;
+  reorderRows(dayId: string, reordered: DayRow[], onError?: () => void): void;
 
   expandedDays: Set<string>;
   toggleDay(dayId: string): void;
@@ -128,19 +128,18 @@ export function BlockCacheProvider({
         return;
       }
 
-      // Round 2: fetch all days for all weeks in parallel
-      const dayResults = await Promise.all(
-        loadedWeeks.map((w) => tables.days.findByWeekId(w.id)),
-      );
+      // Round 2: fetch all days in a single .in() query
+      const weekIds = loadedWeeks.map((w) => w.id);
+      const { data: allDaysData } = await tables.days.findByWeekIds(weekIds);
 
       if (fetchId !== fetchIdRef.current) return;
 
+      const allDays = allDaysData ?? [];
       const daysMap = new Map<string, Day[]>();
-      const allDays: Day[] = [];
-      for (let i = 0; i < loadedWeeks.length; i++) {
-        const days = dayResults[i].data ?? [];
-        daysMap.set(loadedWeeks[i].id, days);
-        allDays.push(...days);
+      for (const week of loadedWeeks) daysMap.set(week.id, []);
+      for (const day of allDays) {
+        const arr = daysMap.get(day.week_id);
+        if (arr) arr.push(day);
       }
 
       if (allDays.length === 0) {
@@ -152,21 +151,26 @@ export function BlockCacheProvider({
         return;
       }
 
-      // Round 3: fetch all columns + rows for all days in parallel
-      const colResults = await Promise.all(
-        allDays.map((d) => tables.dayColumns.findByDayId(d.id)),
-      );
-      const rowResults = await Promise.all(
-        allDays.map((d) => tables.dayRows.findByDayId(d.id)),
-      );
+      // Round 3: fetch all columns + rows in two parallel .in() queries
+      const dayIds = allDays.map((d) => d.id);
+      const [{ data: allColsData }, { data: allRowsData }] = await Promise.all([
+        tables.dayColumns.findByDayIds(dayIds),
+        tables.dayRows.findByDayIds(dayIds),
+      ]);
 
       if (fetchId !== fetchIdRef.current) return;
 
       const colsMap = new Map<string, DayColumn[]>();
       const rowsMap = new Map<string, DayRow[]>();
-      for (let i = 0; i < allDays.length; i++) {
-        colsMap.set(allDays[i].id, colResults[i].data ?? []);
-        rowsMap.set(allDays[i].id, rowResults[i].data ?? []);
+      for (const day of allDays) {
+        colsMap.set(day.id, []);
+        rowsMap.set(day.id, []);
+      }
+      for (const col of allColsData ?? []) {
+        colsMap.get(col.day_id)?.push(col);
+      }
+      for (const row of allRowsData ?? []) {
+        rowsMap.get(row.day_id)?.push(row);
       }
 
       setWeeks(loadedWeeks);
@@ -283,60 +287,68 @@ export function BlockCacheProvider({
         return newWeek;
       }
 
+      // Create all days in parallel
+      const newDayResults = await Promise.all(
+        sourceDays.map((day) =>
+          tables.days.create({
+            week_id: newWeek.id,
+            day_number: day.day_number,
+            name: day.name,
+            week_day_index: day.week_day_index,
+          }),
+        ),
+      );
+
       const newDays: Day[] = [];
       const newColsByDayId = new Map<string, DayColumn[]>();
       const newRowsByDayId = new Map<string, DayRow[]>();
 
-      for (const day of sourceDays) {
-        const sourceColumns = columnsByDayId.get(day.id) ?? [];
-        const sourceRows = rowsByDayId.get(day.id) ?? [];
+      // For each new day, create columns then rows — parallel across days
+      await Promise.all(
+        newDayResults.map(async ({ data: newDay }, i) => {
+          if (!newDay) return;
+          newDays.push(newDay);
 
-        const { data: newDay } = await tables.days.create({
-          week_id: newWeek.id,
-          day_number: day.day_number,
-          name: day.name,
-          week_day_index: day.week_day_index,
-        });
-        if (!newDay) continue;
+          const sourceColumns = columnsByDayId.get(sourceDays[i].id) ?? [];
+          const sourceRows = rowsByDayId.get(sourceDays[i].id) ?? [];
 
-        newDays.push(newDay);
-
-        // Clone columns
-        const columnIdMap = new Map<string, string>();
-        if (sourceColumns.length > 0) {
-          const { data: newCols } = await tables.dayColumns.createMany(
-            sourceColumns.map((col) => ({
-              day_id: newDay.id,
-              label: col.label,
-              order: col.order,
-            })),
-          );
-          if (newCols) {
-            for (let i = 0; i < sourceColumns.length; i++) {
-              columnIdMap.set(sourceColumns[i].id, newCols[i].id);
+          // Clone columns
+          const columnIdMap = new Map<string, string>();
+          if (sourceColumns.length > 0) {
+            const { data: newCols } = await tables.dayColumns.createMany(
+              sourceColumns.map((col) => ({
+                day_id: newDay.id,
+                label: col.label,
+                order: col.order,
+              })),
+            );
+            if (newCols) {
+              for (let j = 0; j < sourceColumns.length; j++) {
+                columnIdMap.set(sourceColumns[j].id, newCols[j].id);
+              }
+              newColsByDayId.set(newDay.id, newCols);
+            } else {
+              newColsByDayId.set(newDay.id, []);
             }
-            newColsByDayId.set(newDay.id, newCols);
           } else {
             newColsByDayId.set(newDay.id, []);
           }
-        } else {
-          newColsByDayId.set(newDay.id, []);
-        }
 
-        // Clone rows with remapped cells
-        if (sourceRows.length > 0) {
-          const { data: newRows } = await tables.dayRows.createMany(
-            sourceRows.map((row) => ({
-              day_id: newDay.id,
-              order: row.order,
-              cells: remapCellKeys(row.cells, columnIdMap),
-            })),
-          );
-          newRowsByDayId.set(newDay.id, newRows ?? []);
-        } else {
-          newRowsByDayId.set(newDay.id, []);
-        }
-      }
+          // Clone rows with remapped cells
+          if (sourceRows.length > 0) {
+            const { data: newRows } = await tables.dayRows.createMany(
+              sourceRows.map((row) => ({
+                day_id: newDay.id,
+                order: row.order,
+                cells: remapCellKeys(row.cells, columnIdMap),
+              })),
+            );
+            newRowsByDayId.set(newDay.id, newRows ?? []);
+          } else {
+            newRowsByDayId.set(newDay.id, []);
+          }
+        }),
+      );
 
       // Update cache with all new data
       setWeeks((prev) => [...prev, newWeek]);
@@ -442,45 +454,53 @@ export function BlockCacheProvider({
         return null;
       }
 
+      // Create all days in parallel
+      const newDayResults = await Promise.all(
+        weekData.days.map((dayData, di) =>
+          tables.days.create({
+            week_id: newWeek.id,
+            day_number: di + 1,
+            name: dayData.name ?? null,
+            week_day_index: dayData.week_day_index ?? null,
+          }),
+        ),
+      );
+
       const newDays: Day[] = [];
       const newColsByDayId = new Map<string, DayColumn[]>();
       const newRowsByDayId = new Map<string, DayRow[]>();
 
-      for (let di = 0; di < weekData.days.length; di++) {
-        const dayData = weekData.days[di];
-        const { data: newDay } = await tables.days.create({
-          week_id: newWeek.id,
-          day_number: di + 1,
-          name: dayData.name ?? null,
-          week_day_index: dayData.week_day_index ?? null,
-        });
-        if (!newDay) continue;
+      // For each new day, create columns then rows — parallel across days
+      await Promise.all(
+        newDayResults.map(async ({ data: newDay }, di) => {
+          if (!newDay) return;
+          newDays.push(newDay);
 
-        newDays.push(newDay);
+          const dayData = weekData.days[di];
+          const columnInserts = dayData.columns.map((label, i) => ({
+            day_id: newDay.id,
+            label,
+            order: i,
+          }));
+          const { data: newCols } = await tables.dayColumns.createMany(columnInserts);
+          const cols = newCols ?? [];
+          newColsByDayId.set(newDay.id, cols);
 
-        const columnInserts = dayData.columns.map((label, i) => ({
-          day_id: newDay.id,
-          label,
-          order: i,
-        }));
-        const { data: newCols } = await tables.dayColumns.createMany(columnInserts);
-        const cols = newCols ?? [];
-        newColsByDayId.set(newDay.id, cols);
-
-        if (dayData.rows.length > 0 && cols.length > 0) {
-          const rowInserts = dayData.rows.map((cells, i) => {
-            const cellMap: Record<string, string> = {};
-            for (let j = 0; j < cols.length; j++) {
-              cellMap[cols[j].id] = cells[j] ?? "";
-            }
-            return { day_id: newDay.id, order: i, cells: cellMap };
-          });
-          const { data: createdRows } = await tables.dayRows.createMany(rowInserts);
-          newRowsByDayId.set(newDay.id, createdRows ?? []);
-        } else {
-          newRowsByDayId.set(newDay.id, []);
-        }
-      }
+          if (dayData.rows.length > 0 && cols.length > 0) {
+            const rowInserts = dayData.rows.map((cells, i) => {
+              const cellMap: Record<string, string> = {};
+              for (let j = 0; j < cols.length; j++) {
+                cellMap[cols[j].id] = cells[j] ?? "";
+              }
+              return { day_id: newDay.id, order: i, cells: cellMap };
+            });
+            const { data: createdRows } = await tables.dayRows.createMany(rowInserts);
+            newRowsByDayId.set(newDay.id, createdRows ?? []);
+          } else {
+            newRowsByDayId.set(newDay.id, []);
+          }
+        }),
+      );
 
       setWeeks((prev) => [...prev, newWeek]);
       setDaysByWeekId((prev) => {
@@ -673,7 +693,7 @@ export function BlockCacheProvider({
   );
 
   const reorderColumns = useCallback(
-    (dayId: string, reordered: DayColumn[]): void => {
+    (dayId: string, reordered: DayColumn[], onError?: () => void): void => {
       // Optimistic update
       setColumnsByDayId((prev) => {
         const next = new Map(prev);
@@ -684,13 +704,14 @@ export function BlockCacheProvider({
       // Persist async
       const supabase = createClient();
       const tables = createTables(supabase);
-      const updates = reordered
-        .map((col, i) => ({ id: col.id, order: i }))
-        .filter((u, i) => u.order !== reordered[i].order || true);
+      const updates = reordered.map((col, i) => ({ id: col.id, order: i }));
 
       Promise.all(
         updates.map((u) => tables.dayColumns.update(u.id, { order: u.order })),
-      ).catch((err) => console.error("Failed to persist column order:", err));
+      ).catch((err) => {
+        console.error("Failed to persist column order:", err);
+        onError?.();
+      });
     },
     [],
   );
@@ -790,7 +811,7 @@ export function BlockCacheProvider({
   }, []);
 
   const reorderRows = useCallback(
-    (dayId: string, reordered: DayRow[]): void => {
+    (dayId: string, reordered: DayRow[], onError?: () => void): void => {
       // Optimistic update
       setRowsByDayId((prev) => {
         const next = new Map(prev);
@@ -805,7 +826,10 @@ export function BlockCacheProvider({
 
       Promise.all(
         updates.map((u) => tables.dayRows.update(u.id, { order: u.order })),
-      ).catch((err) => console.error("Failed to persist row order:", err));
+      ).catch((err) => {
+        console.error("Failed to persist row order:", err);
+        onError?.();
+      });
     },
     [],
   );

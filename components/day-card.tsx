@@ -64,6 +64,7 @@ export function DayCard({ day }: DayCardProps) {
   const [showColumnInput, setShowColumnInput] = useState(false);
   const [addingColumn, setAddingColumn] = useState(false);
   const [newColumnLabel, setNewColumnLabel] = useState("");
+  const [reorderError, setReorderError] = useState<string | null>(null);
 
   // Day info state
   const [infoOpen, setInfoOpen] = useState(false);
@@ -278,12 +279,16 @@ export function DayCard({ day }: DayCardProps) {
             dayId={day.id}
             columns={columns}
             rows={rows}
-            onColumnsReordered={(reordered) => reorderColumns(day.id, reordered)}
-            onRowsReordered={(reordered) => reorderRows(day.id, reordered)}
+            onColumnsReordered={(reordered) => reorderColumns(day.id, reordered, () => setReorderError("Failed to save column order"))}
+            onRowsReordered={(reordered) => reorderRows(day.id, reordered, () => setReorderError("Failed to save row order"))}
             onRowDeleted={handleRowDeleted}
             onColumnDeleted={handleColumnDeleted}
             onCellSaved={handleCellSaved}
           />
+
+          {reorderError && (
+            <p className="px-4 text-xs text-destructive">{reorderError}</p>
+          )}
 
           <div className="flex items-center gap-2 px-4 py-3">
             <Button

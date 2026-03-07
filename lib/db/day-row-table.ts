@@ -27,6 +27,15 @@ export class DayRowTable extends BaseTable<
     return { data: data as DayRow[] | null, error: this.toError(error) };
   }
 
+  async findByDayIds(dayIds: string[]): Promise<DbResult<DayRow[]>> {
+    const { data, error } = await this.supabase
+      .from(this.tableName)
+      .select("*")
+      .in("day_id", dayIds)
+      .order("order");
+    return { data: data as DayRow[] | null, error: this.toError(error) };
+  }
+
   async updateCells(
     rowId: string,
     cells: Record<string, string>,

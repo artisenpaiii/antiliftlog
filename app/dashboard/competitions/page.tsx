@@ -19,9 +19,13 @@ async function CompetitionsContent() {
   return <CompetitionsPage initialCompetitions={competitions ?? []} />;
 }
 
+function Loading() {
+  return <div className="flex items-center justify-center h-48 text-muted-foreground text-sm">Loading…</div>;
+}
+
 export default function Page() {
   return (
-    <Suspense>
+    <Suspense fallback={<Loading />}>
       <CompetitionsContent />
     </Suspense>
   );

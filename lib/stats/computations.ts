@@ -3,6 +3,36 @@ import type { StatsSettings } from "@/lib/types/database";
 import { WEEKDAY_SHORT_LABELS } from "@/lib/types/database";
 import type { ProgramHierarchy, WeekDataPoint, LiftType } from "./types";
 
+export interface UserPRs {
+  squat: number | null;
+  bench: number | null;
+  deadlift: number | null;
+}
+
+export interface IntensityZonePoint {
+  label: string;
+  zone1: number; // < 70% 1RM — technique / GPP
+  zone2: number; // 70–80% — volume / hypertrophy
+  zone3: number; // 80–90% — primary strength
+  zone4: number; // > 90% — neural / peaking
+}
+
+export interface WeeklyLiftSummary {
+  sets: number;
+  totalReps: number;
+  avgRpe: number | null;
+  peakWeight: number | null;
+  volume: number; // sets × reps × weight
+  avgIntensityPct: number | null;
+}
+
+export interface WeeklyLoadRow {
+  label: string;
+  squat: WeeklyLiftSummary;
+  bench: WeeklyLiftSummary;
+  deadlift: WeeklyLiftSummary;
+}
+
 export const LIFT_MULTIPLIERS: Record<LiftType, number> = {
   bench: 1.0,
   squat: 1.3,
@@ -250,4 +280,157 @@ export function computeVolumeData(hierarchy: ProgramHierarchy, settings: StatsSe
   });
 
   return { dataPoints, exercises };
+}
+
+export function computeIntensityDistribution(
+  hierarchy: ProgramHierarchy,
+  settings: StatsSettings,
+  userPRs: UserPRs,
+): { dataPoints: IntensityZonePoint[]; hasData: boolean } {
+  const dataPoints: IntensityZonePoint[] = [];
+  let hasData = false;
+
+  for (const blockData of hierarchy.blocks) {
+    for (const weekData of blockData.weeks) {
+      let label: string;
+      if (blockData.block.start_date) {
+        const start = new Date(blockData.block.start_date + "T00:00:00");
+        const weekOffset = (weekData.week.week_number - 1) * 7;
+        const weekStart = new Date(start);
+        weekStart.setDate(start.getDate() + weekOffset);
+        label = weekStart.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+      } else {
+        label = `B${blockData.block.order + 1}W${weekData.week.week_number}`;
+      }
+
+      const point: IntensityZonePoint = { label, zone1: 0, zone2: 0, zone3: 0, zone4: 0 };
+
+      for (const dayData of weekData.days) {
+        const exerciseCol = dayData.columns.find((c) => c.label === settings.exercise_label);
+        const setsCol = dayData.columns.find((c) => c.label === settings.sets_label);
+        const weightCol = dayData.columns.find((c) => c.label === settings.weight_label);
+
+        if (!exerciseCol || !setsCol || !weightCol) continue;
+
+        for (const row of dayData.rows) {
+          const exercise = row.cells[exerciseCol.id]?.trim();
+          if (!exercise) continue;
+
+          const liftType = classifyLift(exercise);
+          if (!liftType) continue;
+
+          const pr = userPRs[liftType];
+          if (!pr || pr <= 0) continue;
+
+          const sets = parseNumber(row.cells[setsCol.id]);
+          const weight = parseNumber(row.cells[weightCol.id]);
+          if (sets <= 0 || weight <= 0) continue;
+
+          const intensity = weight / pr;
+          if (intensity < 0.7) point.zone1 += sets;
+          else if (intensity < 0.8) point.zone2 += sets;
+          else if (intensity < 0.9) point.zone3 += sets;
+          else point.zone4 += sets;
+
+          hasData = true;
+        }
+      }
+
+      const totalSets = point.zone1 + point.zone2 + point.zone3 + point.zone4;
+      if (totalSets > 0) {
+        dataPoints.push(point);
+      }
+    }
+  }
+
+  return { dataPoints, hasData };
+}
+
+function emptyLiftSummary(): WeeklyLiftSummary {
+  return { sets: 0, totalReps: 0, avgRpe: null, peakWeight: null, volume: 0, avgIntensityPct: null };
+}
+
+export function computeWeeklyLoadSummary(
+  hierarchy: ProgramHierarchy,
+  settings: StatsSettings,
+  userPRs: UserPRs,
+): WeeklyLoadRow[] {
+  const rows: WeeklyLoadRow[] = [];
+
+  for (const blockData of hierarchy.blocks) {
+    for (const weekData of blockData.weeks) {
+      let label: string;
+      if (blockData.block.start_date) {
+        const start = new Date(blockData.block.start_date + "T00:00:00");
+        const weekOffset = (weekData.week.week_number - 1) * 7;
+        const weekStart = new Date(start);
+        weekStart.setDate(start.getDate() + weekOffset);
+        label = weekStart.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+      } else {
+        label = `B${blockData.block.order + 1}W${weekData.week.week_number}`;
+      }
+
+      const liftData: Record<LiftType, { sets: number; reps: number[]; rpes: number[]; weights: number[]; volume: number; intensities: number[] }> = {
+        squat: { sets: 0, reps: [], rpes: [], weights: [], volume: 0, intensities: [] },
+        bench: { sets: 0, reps: [], rpes: [], weights: [], volume: 0, intensities: [] },
+        deadlift: { sets: 0, reps: [], rpes: [], weights: [], volume: 0, intensities: [] },
+      };
+
+      for (const dayData of weekData.days) {
+        const exerciseCol = dayData.columns.find((c) => c.label === settings.exercise_label);
+        const setsCol = dayData.columns.find((c) => c.label === settings.sets_label);
+        const repsCol = dayData.columns.find((c) => c.label === settings.reps_label);
+        const weightCol = dayData.columns.find((c) => c.label === settings.weight_label);
+        const rpeCol = settings.rpe_label ? dayData.columns.find((c) => c.label === settings.rpe_label) : undefined;
+
+        if (!exerciseCol || !setsCol || !repsCol || !weightCol) continue;
+
+        for (const row of dayData.rows) {
+          const exercise = row.cells[exerciseCol.id]?.trim();
+          if (!exercise) continue;
+
+          const liftType = classifyLift(exercise);
+          if (!liftType) continue;
+
+          const sets = parseNumber(row.cells[setsCol.id]);
+          const reps = parseNumber(row.cells[repsCol.id]);
+          const weight = parseNumber(row.cells[weightCol.id]);
+          const rpe = rpeCol ? parseRpe(row.cells[rpeCol.id]) : 0;
+
+          if (sets <= 0 || reps <= 0 || weight <= 0) continue;
+
+          const d = liftData[liftType];
+          d.sets += sets;
+          d.reps.push(reps);
+          d.weights.push(weight);
+          d.volume += sets * reps * weight;
+          if (rpe > 0) d.rpes.push(rpe);
+
+          const pr = userPRs[liftType];
+          if (pr && pr > 0) d.intensities.push(weight / pr);
+        }
+      }
+
+      const toSummary = (d: typeof liftData.squat): WeeklyLiftSummary => ({
+        sets: d.sets,
+        totalReps: d.reps.reduce((a, b) => a + b, 0),
+        avgRpe: d.rpes.length > 0 ? d.rpes.reduce((a, b) => a + b, 0) / d.rpes.length : null,
+        peakWeight: d.weights.length > 0 ? Math.max(...d.weights) : null,
+        volume: d.volume,
+        avgIntensityPct: d.intensities.length > 0 ? (d.intensities.reduce((a, b) => a + b, 0) / d.intensities.length) * 100 : null,
+      });
+
+      const row: WeeklyLoadRow = {
+        label,
+        squat: toSummary(liftData.squat),
+        bench: toSummary(liftData.bench),
+        deadlift: toSummary(liftData.deadlift),
+      };
+
+      const hasAnyData = row.squat.sets > 0 || row.bench.sets > 0 || row.deadlift.sets > 0;
+      if (hasAnyData) rows.push(row);
+    }
+  }
+
+  return rows;
 }

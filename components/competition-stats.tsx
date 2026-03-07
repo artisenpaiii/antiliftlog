@@ -3,7 +3,10 @@
 import { useState, useMemo } from "react";
 import { Trophy } from "lucide-react";
 import { VolumeChart, type WeekDataPoint } from "@/components/volume-chart";
+import { calculateIPFGL, getGLBenchmark } from "@/lib/ipf-gl";
+import { cn } from "@/lib/utils";
 import type { Competition } from "@/lib/types/database";
+import type { Sex, Equipment } from "@/lib/ipf-gl";
 
 const LIFTS = ["squat", "bench", "deadlift"] as const;
 const ATTEMPTS = [1, 2, 3] as const;
@@ -20,6 +23,7 @@ const ALL_METRICS = [
   "Deadlift 2",
   "Deadlift 3",
   "Total",
+  "IPF GL",
 ] as const;
 
 type Metric = (typeof ALL_METRICS)[number];
@@ -71,8 +75,9 @@ interface CompetitionStatsProps {
 }
 
 export function CompetitionStats({ competitions }: CompetitionStatsProps) {
-  const [selectedMetrics, setSelectedMetrics] =
-    useState<Metric[]>(DEFAULT_METRICS);
+  const [selectedMetrics, setSelectedMetrics] = useState<Metric[]>(DEFAULT_METRICS);
+  const [sex, setSex] = useState<Sex>("male");
+  const [equipment, setEquipment] = useState<Equipment>("raw");
 
   const sorted = useMemo(
     () =>
@@ -96,19 +101,22 @@ export function CompetitionStats({ competitions }: CompetitionStatsProps) {
       if (comp.bench_1_kg !== null) point["Bench 1"] = comp.bench_1_kg;
       if (comp.bench_2_kg !== null) point["Bench 2"] = comp.bench_2_kg;
       if (comp.bench_3_kg !== null) point["Bench 3"] = comp.bench_3_kg;
-      if (comp.deadlift_1_kg !== null)
-        point["Deadlift 1"] = comp.deadlift_1_kg;
-      if (comp.deadlift_2_kg !== null)
-        point["Deadlift 2"] = comp.deadlift_2_kg;
-      if (comp.deadlift_3_kg !== null)
-        point["Deadlift 3"] = comp.deadlift_3_kg;
+      if (comp.deadlift_1_kg !== null) point["Deadlift 1"] = comp.deadlift_1_kg;
+      if (comp.deadlift_2_kg !== null) point["Deadlift 2"] = comp.deadlift_2_kg;
+      if (comp.deadlift_3_kg !== null) point["Deadlift 3"] = comp.deadlift_3_kg;
 
       const total = computeTotal(comp);
-      if (total !== null) point["Total"] = total;
+      if (total !== null) {
+        point["Total"] = total;
+        if (comp.bodyweight_kg !== null) {
+          const gl = calculateIPFGL(total, comp.bodyweight_kg, sex, equipment);
+          if (gl !== null) point["IPF GL"] = Math.round(gl * 100) / 100;
+        }
+      }
 
       return point;
     });
-  }, [sorted]);
+  }, [sorted, sex, equipment]);
 
   function toggleMetric(metric: Metric) {
     setSelectedMetrics((prev) =>
@@ -133,6 +141,44 @@ export function CompetitionStats({ competitions }: CompetitionStatsProps) {
 
   return (
     <div className="space-y-6">
+      {/* Sex / Equipment (needed for IPF GL) */}
+      <div className="flex flex-wrap gap-4 items-end">
+        <div className="space-y-1">
+          <p className="text-xs text-muted-foreground">Sex (for IPF GL)</p>
+          <div className="flex rounded-lg bg-muted p-1 w-fit">
+            {(["male", "female"] as Sex[]).map((s) => (
+              <button
+                key={s}
+                onClick={() => setSex(s)}
+                className={cn(
+                  "px-3 py-1 text-xs rounded-md transition-colors capitalize",
+                  sex === s ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="space-y-1">
+          <p className="text-xs text-muted-foreground">Equipment</p>
+          <div className="flex rounded-lg bg-muted p-1 w-fit">
+            {(["raw", "equipped"] as Equipment[]).map((e) => (
+              <button
+                key={e}
+                onClick={() => setEquipment(e)}
+                className={cn(
+                  "px-3 py-1 text-xs rounded-md transition-colors capitalize",
+                  equipment === e ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {e}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
       <div className="space-y-2">
         <h3 className="text-sm font-medium text-muted-foreground">Metrics</h3>
         <div className="flex flex-wrap gap-2">
@@ -156,6 +202,85 @@ export function CompetitionStats({ competitions }: CompetitionStatsProps) {
       </div>
 
       <VolumeChart data={data} exercises={selectedMetrics} />
+
+      {/* Competition history table */}
+      <div className="space-y-2">
+        <h3 className="text-sm font-medium text-muted-foreground">History</h3>
+        <div className="overflow-x-auto rounded-lg border border-border">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border bg-muted/30">
+                <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Meet</th>
+                <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Date</th>
+                <th className="px-3 py-2.5 text-right font-medium text-muted-foreground">BW</th>
+                <th className="px-3 py-2.5 text-right font-medium text-muted-foreground">Squat</th>
+                <th className="px-3 py-2.5 text-right font-medium text-muted-foreground">Bench</th>
+                <th className="px-3 py-2.5 text-right font-medium text-muted-foreground">Deadlift</th>
+                <th className="px-3 py-2.5 text-right font-medium text-muted-foreground">Total</th>
+                <th className="px-3 py-2.5 text-right font-medium text-muted-foreground">GL</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sorted.map((comp) => {
+                const total = computeTotal(comp);
+                const gl = total !== null && comp.bodyweight_kg !== null
+                  ? calculateIPFGL(total, comp.bodyweight_kg, sex, equipment)
+                  : null;
+                const benchmark = gl !== null ? getGLBenchmark(gl) : null;
+                const bestSquat = [comp.squat_1_kg, comp.squat_2_kg, comp.squat_3_kg]
+                  .filter((v): v is number => v !== null)
+                  .reduce((best, v, i) => {
+                    const goodKey = `squat_${i + 1}_good` as keyof Competition;
+                    return comp[goodKey] === true && v > (best ?? 0) ? v : best;
+                  }, null as number | null);
+                const bestBench = [comp.bench_1_kg, comp.bench_2_kg, comp.bench_3_kg]
+                  .filter((v): v is number => v !== null)
+                  .reduce((best, v, i) => {
+                    const goodKey = `bench_${i + 1}_good` as keyof Competition;
+                    return comp[goodKey] === true && v > (best ?? 0) ? v : best;
+                  }, null as number | null);
+                const bestDead = [comp.deadlift_1_kg, comp.deadlift_2_kg, comp.deadlift_3_kg]
+                  .filter((v): v is number => v !== null)
+                  .reduce((best, v, i) => {
+                    const goodKey = `deadlift_${i + 1}_good` as keyof Competition;
+                    return comp[goodKey] === true && v > (best ?? 0) ? v : best;
+                  }, null as number | null);
+
+                return (
+                  <tr key={comp.id} className="border-b border-border/50 last:border-b-0">
+                    <td className="px-3 py-2.5 font-medium max-w-[160px] truncate">{comp.meet_name}</td>
+                    <td className="px-3 py-2.5 text-muted-foreground whitespace-nowrap">{formatDate(comp.meet_date)}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">
+                      {comp.bodyweight_kg !== null ? `${comp.bodyweight_kg}` : "—"}
+                    </td>
+                    <td className="px-3 py-2.5 text-right tabular-nums">
+                      {bestSquat !== null ? bestSquat : <span className="text-muted-foreground">—</span>}
+                    </td>
+                    <td className="px-3 py-2.5 text-right tabular-nums">
+                      {bestBench !== null ? bestBench : <span className="text-muted-foreground">—</span>}
+                    </td>
+                    <td className="px-3 py-2.5 text-right tabular-nums">
+                      {bestDead !== null ? bestDead : <span className="text-muted-foreground">—</span>}
+                    </td>
+                    <td className="px-3 py-2.5 text-right tabular-nums font-medium">
+                      {total !== null ? total : <span className="text-muted-foreground">—</span>}
+                    </td>
+                    <td className="px-3 py-2.5 text-right tabular-nums">
+                      {gl !== null ? (
+                        <span className={cn("font-medium", benchmark?.color)}>
+                          {gl.toFixed(1)}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 }

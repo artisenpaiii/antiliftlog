@@ -17,4 +17,13 @@ export class DayTable extends BaseTable<Day, DayInsert, DayUpdate> {
       .order("day_number");
     return { data: data as Day[] | null, error: this.toError(error) };
   }
+
+  async findByWeekIds(weekIds: string[]): Promise<DbResult<Day[]>> {
+    const { data, error } = await this.supabase
+      .from(this.tableName)
+      .select("*")
+      .in("week_id", weekIds)
+      .order("day_number");
+    return { data: data as Day[] | null, error: this.toError(error) };
+  }
 }

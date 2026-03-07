@@ -9,10 +9,20 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { VolumeChart } from "@/components/volume-chart";
 import { FatigueChart } from "@/components/fatigue-chart";
+import { E1RMChart } from "@/components/e1rm-chart";
+import { IntensityChart } from "@/components/intensity-chart";
+import { WeeklyLoadTable } from "@/components/weekly-load-table";
 import { createClient } from "@/lib/supabase/client";
 import { createTables } from "@/lib/db";
-import type { Program, StatsSettings } from "@/lib/types/database";
-import { computeVolumeData, computeFatigueData, loadProgramHierarchy } from "@/lib/stats";
+import type { Program, StatsSettings, UserMetadata } from "@/lib/types/database";
+import {
+  computeVolumeData,
+  computeFatigueData,
+  computeIntensityDistribution,
+  computeWeeklyLoadSummary,
+  computeE1RMData,
+  loadProgramHierarchy,
+} from "@/lib/stats";
 import type { ProgramHierarchy } from "@/lib/stats";
 
 interface StatsDetailProps {
@@ -24,6 +34,7 @@ export function StatsDetail({ program, onBack }: StatsDetailProps) {
   const [settings, setSettings] = useState<StatsSettings | null>(null);
   const [hierarchy, setHierarchy] = useState<ProgramHierarchy | null>(null);
   const [columnLabels, setColumnLabels] = useState<string[]>([]);
+  const [userMetadata, setUserMetadata] = useState<UserMetadata | null>(null);
   const [loading, setLoading] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [selectedExercises, setSelectedExercises] = useState<string[]>([]);
@@ -48,6 +59,20 @@ export function StatsDetail({ program, onBack }: StatsDetailProps) {
 
     const supabase = createClient();
     const tables = createTables(supabase);
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      const meta = user.user_metadata ?? {};
+      setUserMetadata({
+        display_name: typeof meta.display_name === "string" ? meta.display_name : "",
+        pb_squat_gym: typeof meta.pb_squat_gym === "number" ? meta.pb_squat_gym : null,
+        pb_bench_gym: typeof meta.pb_bench_gym === "number" ? meta.pb_bench_gym : null,
+        pb_deadlift_gym: typeof meta.pb_deadlift_gym === "number" ? meta.pb_deadlift_gym : null,
+        pb_squat_comp: typeof meta.pb_squat_comp === "number" ? meta.pb_squat_comp : null,
+        pb_bench_comp: typeof meta.pb_bench_comp === "number" ? meta.pb_bench_comp : null,
+        pb_deadlift_comp: typeof meta.pb_deadlift_comp === "number" ? meta.pb_deadlift_comp : null,
+      });
+    }
 
     const { hierarchy: builtHierarchy, columnLabels: labels, settings: fetchedSettings } = await loadProgramHierarchy(tables, program.id);
 
@@ -97,6 +122,34 @@ export function StatsDetail({ program, onBack }: StatsDetailProps) {
     const result = computeFatigueData(hierarchy, settings, sleepAdjustmentEnabled);
     return { fatigueDataPoints: result.dataPoints, activeLiftTypes: result.liftTypes };
   }, [hierarchy, settings, sleepAdjustmentEnabled]);
+
+  // E1RM progression
+  const { e1rmDataPoints, e1rmLiftTypes } = useMemo(() => {
+    if (!hierarchy || !settings || !settings.rpe_label) {
+      return { e1rmDataPoints: [], e1rmLiftTypes: [] };
+    }
+    const result = computeE1RMData(hierarchy, settings);
+    return { e1rmDataPoints: result.dataPoints, e1rmLiftTypes: result.activeLiftTypes };
+  }, [hierarchy, settings]);
+
+  const userPRs = useMemo(() => ({
+    squat: userMetadata?.pb_squat_gym ?? null,
+    bench: userMetadata?.pb_bench_gym ?? null,
+    deadlift: userMetadata?.pb_deadlift_gym ?? null,
+  }), [userMetadata]);
+
+  // Intensity zone distribution
+  const { intensityDataPoints } = useMemo(() => {
+    if (!hierarchy || !settings) return { intensityDataPoints: [] };
+    const result = computeIntensityDistribution(hierarchy, settings, userPRs);
+    return { intensityDataPoints: result.dataPoints };
+  }, [hierarchy, settings, userPRs]);
+
+  // Weekly load table
+  const weeklyLoadRows = useMemo(() => {
+    if (!hierarchy || !settings) return [];
+    return computeWeeklyLoadSummary(hierarchy, settings, userPRs);
+  }, [hierarchy, settings, userPRs]);
 
   // Reset selected exercises when allExercises changes — big three always on by default
   useEffect(() => {
@@ -350,6 +403,35 @@ export function StatsDetail({ program, onBack }: StatsDetailProps) {
             ) : (
               <div className="rounded-lg border border-dashed border-border p-12 text-center">
                 <p className="text-sm text-muted-foreground">No volume data found. Check that your column mapping matches the labels used in your program.</p>
+              </div>
+            )}
+
+            {/* E1RM Progression Chart */}
+            {settings?.rpe_label && e1rmDataPoints.length > 0 && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-1.5">
+                  <h3 className="text-sm font-medium text-muted-foreground">E1RM Progression</h3>
+                </div>
+                <E1RMChart data={e1rmDataPoints} activeLiftTypes={e1rmLiftTypes} userPRs={userPRs} />
+              </div>
+            )}
+
+            {/* Intensity Zone Distribution */}
+            {intensityDataPoints.length > 0 && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-1.5">
+                  <h3 className="text-sm font-medium text-muted-foreground">Intensity Zone Distribution</h3>
+                </div>
+                <IntensityChart data={intensityDataPoints} />
+              </div>
+            )}
+
+            {/* Weekly Load Table */}
+            {weeklyLoadRows.length > 0 && (
+              <div className="space-y-3">
+                <h3 className="text-sm font-medium text-muted-foreground">Weekly Load Summary</h3>
+                <p className="text-xs text-muted-foreground">Volume color = avg intensity vs your gym PRs. Peak weight in kg.</p>
+                <WeeklyLoadTable rows={weeklyLoadRows} />
               </div>
             )}
 

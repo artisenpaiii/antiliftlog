@@ -9,13 +9,6 @@ export abstract class BaseTable<Row, Insert, Update> {
     this.supabase = supabase;
   }
 
-  async findAll(): Promise<DbResult<Row[]>> {
-    const { data, error } = await this.supabase
-      .from(this.tableName)
-      .select("*");
-    return { data: data as Row[] | null, error: this.toError(error) };
-  }
-
   async findById(id: string): Promise<DbResult<Row>> {
     const { data, error } = await this.supabase
       .from(this.tableName)

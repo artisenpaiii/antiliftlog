@@ -26,9 +26,13 @@ async function ToolsContent() {
   return <ToolsPage initialMetadata={initialMetadata} />;
 }
 
+function Loading() {
+  return <div className="flex items-center justify-center h-48 text-muted-foreground text-sm">Loading…</div>;
+}
+
 export default function ToolsPageRoute() {
   return (
-    <Suspense>
+    <Suspense fallback={<Loading />}>
       <ToolsContent />
     </Suspense>
   );

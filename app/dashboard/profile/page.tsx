@@ -44,9 +44,13 @@ async function ProfileContent() {
   );
 }
 
+function Loading() {
+  return <div className="flex items-center justify-center h-48 text-muted-foreground text-sm">Loading…</div>;
+}
+
 export default function ProfilePageRoute() {
   return (
-    <Suspense>
+    <Suspense fallback={<Loading />}>
       <ProfileContent />
     </Suspense>
   );

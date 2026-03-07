@@ -14,6 +14,7 @@ export function InlineEdit({ value, onSave, className }: InlineEditProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -36,13 +37,17 @@ export function InlineEdit({ value, onSave, className }: InlineEditProps) {
     }
 
     setSaving(true);
+    setSaveError(null);
     try {
       await onSave(trimmed);
-    } catch {
+      setSaving(false);
+      setEditing(false);
+    } catch (err) {
       setDraft(value);
+      setSaving(false);
+      setEditing(false);
+      setSaveError(err instanceof Error ? err.message : "Failed to save");
     }
-    setSaving(false);
-    setEditing(false);
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
@@ -78,15 +83,18 @@ export function InlineEdit({ value, onSave, className }: InlineEditProps) {
   }
 
   return (
-    <button
-      type="button"
-      onClick={() => setEditing(true)}
-      className={cn(
-        "text-left cursor-text hover:border-b hover:border-border transition-colors border-b border-transparent",
-        className,
-      )}
-    >
-      {value}
-    </button>
+    <div className="flex flex-col gap-1">
+      <button
+        type="button"
+        onClick={() => { setEditing(true); setSaveError(null); }}
+        className={cn(
+          "text-left cursor-text hover:border-b hover:border-border transition-colors border-b border-transparent",
+          className,
+        )}
+      >
+        {value}
+      </button>
+      {saveError && <p className="text-xs text-destructive">{saveError}</p>}
+    </div>
   );
 }

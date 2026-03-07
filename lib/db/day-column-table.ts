@@ -26,4 +26,13 @@ export class DayColumnTable extends BaseTable<
       .order("order");
     return { data: data as DayColumn[] | null, error: this.toError(error) };
   }
+
+  async findByDayIds(dayIds: string[]): Promise<DbResult<DayColumn[]>> {
+    const { data, error } = await this.supabase
+      .from(this.tableName)
+      .select("*")
+      .in("day_id", dayIds)
+      .order("order");
+    return { data: data as DayColumn[] | null, error: this.toError(error) };
+  }
 }

@@ -1,11 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { Calculator, ArrowLeft, TrendingUp } from "lucide-react";
+import { Calculator, ArrowLeft, TrendingUp, Trophy, Target } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { RpeCalculator } from "@/components/rpe-calculator";
 import { OneRmCalculator } from "@/components/one-rm-calculator";
+import { IPFGLCalculator } from "@/components/ipf-gl-calculator";
+import { AttemptSelection } from "@/components/attempt-selection";
 import type { UserMetadata } from "@/lib/types/database";
 
 interface ToolsPageProps {
@@ -61,6 +63,52 @@ export function ToolsPage({ initialMetadata }: ToolsPageProps) {
     );
   }
 
+  if (selectedTool === "ipf-gl") {
+    return (
+      <div className="flex flex-col gap-6">
+        <div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setSelectedTool(null)}
+            className="mb-2 -ml-2 text-muted-foreground"
+          >
+            <ArrowLeft size={16} className="mr-1" />
+            Back to Tools
+          </Button>
+          <h1 className="text-2xl font-semibold tracking-tight">IPF GL Points</h1>
+          <p className="text-muted-foreground text-sm mt-1">
+            Official IPF scoring system since 2019. Normalizes total relative to bodyweight for cross-class comparison.
+          </p>
+        </div>
+        <IPFGLCalculator />
+      </div>
+    );
+  }
+
+  if (selectedTool === "meet-prep") {
+    return (
+      <div className="flex flex-col gap-6">
+        <div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setSelectedTool(null)}
+            className="mb-2 -ml-2 text-muted-foreground"
+          >
+            <ArrowLeft size={16} className="mr-1" />
+            Back to Tools
+          </Button>
+          <h1 className="text-2xl font-semibold tracking-tight">Attempt Selection</h1>
+          <p className="text-muted-foreground text-sm mt-1">
+            Generate systematic attempt recommendations for your next meet based on training maxes.
+          </p>
+        </div>
+        <AttemptSelection initialMetadata={initialMetadata} />
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-8">
       <div>
@@ -97,6 +145,38 @@ export function ToolsPage({ initialMetadata }: ToolsPageProps) {
               <CardTitle>1RM Predictor</CardTitle>
               <CardDescription>
                 Predict your 1 rep max from a performed set and RPE.
+              </CardDescription>
+            </div>
+          </CardHeader>
+        </Card>
+        <Card
+          className="cursor-pointer transition-colors hover:bg-accent/50"
+          onClick={() => setSelectedTool("ipf-gl")}
+        >
+          <CardHeader className="flex flex-row items-center gap-4">
+            <div className="rounded-md bg-primary/10 p-2.5">
+              <Trophy size={20} className="text-primary" />
+            </div>
+            <div className="space-y-1">
+              <CardTitle>IPF GL Points</CardTitle>
+              <CardDescription>
+                Calculate your GL score to compare totals across weight classes and time.
+              </CardDescription>
+            </div>
+          </CardHeader>
+        </Card>
+        <Card
+          className="cursor-pointer transition-colors hover:bg-accent/50"
+          onClick={() => setSelectedTool("meet-prep")}
+        >
+          <CardHeader className="flex flex-row items-center gap-4">
+            <div className="rounded-md bg-primary/10 p-2.5">
+              <Target size={20} className="text-primary" />
+            </div>
+            <div className="space-y-1">
+              <CardTitle>Attempt Selection</CardTitle>
+              <CardDescription>
+                Generate systematic meet-day attempt recommendations from your training maxes.
               </CardDescription>
             </div>
           </CardHeader>

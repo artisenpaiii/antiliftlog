@@ -14,10 +14,13 @@ async function StatsContent() {
 
   const userId = data.claims.sub;
   const tables = createTables(supabase);
-  const [{ data: programs }, { data: competitions }] = await Promise.all([
+  const [{ data: programs, error: programsError }, { data: competitions, error: competitionsError }] = await Promise.all([
     tables.programs.findByUserId(userId),
     tables.competitions.findByUserId(userId),
   ]);
+
+  if (programsError) console.error("Failed to load programs:", programsError);
+  if (competitionsError) console.error("Failed to load competitions:", competitionsError);
 
   return (
     <StatsPage
@@ -27,9 +30,13 @@ async function StatsContent() {
   );
 }
 
+function Loading() {
+  return <div className="flex items-center justify-center h-48 text-muted-foreground text-sm">Loading…</div>;
+}
+
 export default function Page() {
   return (
-    <Suspense>
+    <Suspense fallback={<Loading />}>
       <StatsContent />
     </Suspense>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { ArrowLeft, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +11,9 @@ import { createTables } from "@/lib/db";
 import { AttemptsTable } from "@/components/attempts-table";
 import type { AttemptDraft } from "@/components/attempts-table";
 import type { Competition, CompetitionUpdate } from "@/lib/types/database";
+import { calculateIPFGL, getGLBenchmark } from "@/lib/ipf-gl";
+import type { Sex, Equipment } from "@/lib/ipf-gl";
+import { cn } from "@/lib/utils";
 
 const LIFTS = ["squat", "bench", "deadlift"] as const;
 const ATTEMPTS = [1, 2, 3] as const;
@@ -106,7 +109,10 @@ export function CompetitionDetail({
   const [draft, setDraft] = useState<Draft>(() => buildDraft(competition));
   const [originalDraft, setOriginalDraft] = useState<Draft>(() => buildDraft(competition));
   const [isSaving, setIsSaving] = useState(false);
+  const [sex, setSex] = useState<Sex>("male");
+  const [equipment, setEquipment] = useState<Equipment>("raw");
   const [saveMessage, setSaveMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const successTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const newDraft = buildDraft(competition);
@@ -197,7 +203,8 @@ export function CompetitionDetail({
     setSaveMessage({ type: "success", text: "Saved" });
     onCompetitionUpdated(data);
 
-    setTimeout(() => {
+    if (successTimerRef.current) clearTimeout(successTimerRef.current);
+    successTimerRef.current = setTimeout(() => {
       setSaveMessage((prev) => (prev?.type === "success" ? null : prev));
     }, 2000);
   }
@@ -300,12 +307,56 @@ export function CompetitionDetail({
           <AttemptsTable draft={attemptDraft} onDraftChange={handleAttemptChange} />
         </div>
 
-        {computedTotal !== null && (
-          <div className="flex items-center gap-2 text-sm">
-            <span className="text-muted-foreground">Total:</span>
-            <span className="font-semibold">{computedTotal} kg</span>
-          </div>
-        )}
+        {computedTotal !== null && (() => {
+          const bw = parseFloatOrNull(draft.bodyweight_kg);
+          const gl = bw !== null ? calculateIPFGL(computedTotal, bw, sex, equipment) : null;
+          const benchmark = gl !== null ? getGLBenchmark(gl) : null;
+          return (
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+              <div className="flex items-center gap-2 text-sm">
+                <span className="text-muted-foreground">Total:</span>
+                <span className="font-semibold">{computedTotal} kg</span>
+                {gl !== null && benchmark && (
+                  <>
+                    <span className="text-muted-foreground">·</span>
+                    <span className={cn("font-semibold", benchmark.color)}>{gl.toFixed(1)} GL</span>
+                    <span className={cn("text-xs", benchmark.color)}>{benchmark.label}</span>
+                  </>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="flex rounded-md bg-muted p-0.5">
+                  {(["male", "female"] as Sex[]).map((s) => (
+                    <button
+                      key={s}
+                      onClick={() => setSex(s)}
+                      className={cn(
+                        "px-2 py-0.5 text-xs rounded transition-colors capitalize",
+                        sex === s ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex rounded-md bg-muted p-0.5">
+                  {(["raw", "equipped"] as Equipment[]).map((e) => (
+                    <button
+                      key={e}
+                      onClick={() => setEquipment(e)}
+                      className={cn(
+                        "px-2 py-0.5 text-xs rounded transition-colors capitalize",
+                        equipment === e ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      {e}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       <div className="border-t px-6 py-3 flex items-center gap-3">

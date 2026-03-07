@@ -61,9 +61,14 @@ export function ImportDayDialog({
   }
 
   async function handleCopyPrompt() {
-    await navigator.clipboard.writeText(DAY_PROMPT);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    try {
+      await navigator.clipboard.writeText(DAY_PROMPT);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      console.warn("Clipboard write failed");
+      setCopied(false);
+    }
   }
 
   async function handleImport() {

@@ -18,9 +18,13 @@ async function ProgramsContent() {
   return <ProgramList programs={programs ?? []} />;
 }
 
+function Loading() {
+  return <div className="flex items-center justify-center h-48 text-muted-foreground text-sm">Loading…</div>;
+}
+
 export default function ProgramsPage() {
   return (
-    <Suspense>
+    <Suspense fallback={<Loading />}>
       <ProgramsContent />
     </Suspense>
   );

@@ -85,12 +85,18 @@ function FatigueTooltip({ active, payload, label }: CustomTooltipProps) {
   );
 }
 
-function ResidualDot(props: any) {
-  const { cx, cy, index, payload } = props;
+interface ResidualDotProps {
+  cx?: number;
+  cy?: number;
+  index?: number;
+  dataLength?: number;
+  payload?: { residualFatigue?: number };
+}
 
+function ResidualDot({ cx, cy, index, dataLength, payload }: ResidualDotProps) {
   if (typeof payload?.residualFatigue !== "number") return null;
 
-  const isLast = index === props?.dataLength - 1;
+  const isLast = index === (dataLength ?? 0) - 1;
   if (!isLast) return null;
 
   return <Dot cx={cx} cy={cy} r={4.5} fill={RESIDUAL_COLOR} stroke="hsl(240, 3.7%, 15.9%)" strokeWidth={1.5} />;

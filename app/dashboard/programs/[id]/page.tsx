@@ -30,13 +30,17 @@ async function ProgramDetailContent({
   return <ProgramDetail program={program} initialBlocks={blocks ?? []} />;
 }
 
+function Loading() {
+  return <div className="flex items-center justify-center h-48 text-muted-foreground text-sm">Loading…</div>;
+}
+
 export default function ProgramPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
   return (
-    <Suspense>
+    <Suspense fallback={<Loading />}>
       <ProgramDetailContent params={params} />
     </Suspense>
   );
