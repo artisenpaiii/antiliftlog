@@ -2,15 +2,16 @@
 
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, X } from "lucide-react";
+import { Eraser, GripVertical, X } from "lucide-react";
 
 interface SortableColumnHeaderProps {
   id: string;
   label: string;
   onDelete?: () => void;
+  onClear?: () => void;
 }
 
-export function SortableColumnHeader({ id, label, onDelete }: SortableColumnHeaderProps) {
+export function SortableColumnHeader({ id, label, onDelete, onClear }: SortableColumnHeaderProps) {
   const {
     attributes,
     listeners,
@@ -42,11 +43,21 @@ export function SortableColumnHeader({ id, label, onDelete }: SortableColumnHead
           <GripVertical size={12} />
         </button>
         {label}
+        {onClear && (
+          <button
+            type="button"
+            onClick={onClear}
+            title="Clear column values"
+            className="ml-auto opacity-0 group-hover/col:opacity-100 text-muted-foreground/50 hover:text-amber-500 transition-opacity"
+          >
+            <Eraser size={12} />
+          </button>
+        )}
         {onDelete && (
           <button
             type="button"
             onClick={onDelete}
-            className="ml-auto opacity-0 group-hover/col:opacity-100 text-muted-foreground/50 hover:text-destructive transition-opacity"
+            className="opacity-0 group-hover/col:opacity-100 text-muted-foreground/50 hover:text-destructive transition-opacity"
           >
             <X size={12} />
           </button>

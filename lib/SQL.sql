@@ -397,3 +397,9 @@ ALTER TABLE public.stats_settings ADD COLUMN rpe_label varchar;
 
 ALTER TABLE public.days ADD COLUMN week_day_index integer;
 ALTER TABLE public.days ADD CONSTRAINT week_day_index_range CHECK (week_day_index BETWEEN 0 AND 6);
+
+-- =========================
+-- MIGRATION: Add planned_rpe_label to stats_settings
+-- =========================
+
+ALTER TABLE public.stats_settings ADD COLUMN planned_rpe_label varchar;

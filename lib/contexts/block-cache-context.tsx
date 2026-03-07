@@ -21,6 +21,7 @@ import type {
   DayRow,
   DayRowInsert,
 } from "@/lib/types/database";
+import type { ImportDayData, ImportWeekData } from "@/lib/types/import";
 
 interface BlockCacheContextValue {
   loading: boolean;
@@ -33,6 +34,8 @@ interface BlockCacheContextValue {
   addWeek(insert: WeekInsert): Promise<Week | null>;
   deleteWeek(weekId: string): Promise<boolean>;
   duplicateWeek(sourceWeek: Week): Promise<Week | null>;
+  importWeek(weekData: ImportWeekData): Promise<Week | null>;
+  importDay(weekId: string, dayData: ImportDayData): Promise<Day | null>;
 
   deleteDay(dayId: string): Promise<boolean>;
   updateDay(dayId: string, update: DayUpdate): Promise<boolean>;
@@ -362,6 +365,145 @@ export function BlockCacheProvider({
     [weeks.length, daysByWeekId, columnsByDayId, rowsByDayId],
   );
 
+  const importDay = useCallback(
+    async (weekId: string, dayData: ImportDayData): Promise<Day | null> => {
+      const supabase = createClient();
+      const tables = createTables(supabase);
+
+      const existingDays = daysByWeekId.get(weekId) ?? [];
+      const { data: newDay, error: dayError } = await tables.days.create({
+        week_id: weekId,
+        day_number: existingDays.length + 1,
+        name: dayData.name ?? null,
+        week_day_index: dayData.week_day_index ?? null,
+      });
+
+      if (dayError || !newDay) {
+        console.error("Failed to import day:", dayError);
+        return null;
+      }
+
+      const columnInserts = dayData.columns.map((label, i) => ({
+        day_id: newDay.id,
+        label,
+        order: i,
+      }));
+
+      const { data: newCols } = await tables.dayColumns.createMany(columnInserts);
+      const cols = newCols ?? [];
+
+      let newRows: DayRow[] = [];
+      if (dayData.rows.length > 0 && cols.length > 0) {
+        const rowInserts = dayData.rows.map((cells, i) => {
+          const cellMap: Record<string, string> = {};
+          for (let j = 0; j < cols.length; j++) {
+            cellMap[cols[j].id] = cells[j] ?? "";
+          }
+          return { day_id: newDay.id, order: i, cells: cellMap };
+        });
+        const { data: createdRows } = await tables.dayRows.createMany(rowInserts);
+        newRows = createdRows ?? [];
+      }
+
+      setDaysByWeekId((prev) => {
+        const next = new Map(prev);
+        const existing = next.get(weekId) ?? [];
+        next.set(weekId, [...existing, newDay]);
+        return next;
+      });
+      setColumnsByDayId((prev) => {
+        const next = new Map(prev);
+        next.set(newDay.id, cols);
+        return next;
+      });
+      setRowsByDayId((prev) => {
+        const next = new Map(prev);
+        next.set(newDay.id, newRows);
+        return next;
+      });
+
+      return newDay;
+    },
+    [daysByWeekId],
+  );
+
+  const importWeek = useCallback(
+    async (weekData: ImportWeekData): Promise<Week | null> => {
+      const supabase = createClient();
+      const tables = createTables(supabase);
+
+      const { data: newWeek, error: weekError } = await tables.weeks.create({
+        block_id: blockId,
+        week_number: weeks.length + 1,
+      });
+
+      if (weekError || !newWeek) {
+        console.error("Failed to import week:", weekError);
+        return null;
+      }
+
+      const newDays: Day[] = [];
+      const newColsByDayId = new Map<string, DayColumn[]>();
+      const newRowsByDayId = new Map<string, DayRow[]>();
+
+      for (let di = 0; di < weekData.days.length; di++) {
+        const dayData = weekData.days[di];
+        const { data: newDay } = await tables.days.create({
+          week_id: newWeek.id,
+          day_number: di + 1,
+          name: dayData.name ?? null,
+          week_day_index: dayData.week_day_index ?? null,
+        });
+        if (!newDay) continue;
+
+        newDays.push(newDay);
+
+        const columnInserts = dayData.columns.map((label, i) => ({
+          day_id: newDay.id,
+          label,
+          order: i,
+        }));
+        const { data: newCols } = await tables.dayColumns.createMany(columnInserts);
+        const cols = newCols ?? [];
+        newColsByDayId.set(newDay.id, cols);
+
+        if (dayData.rows.length > 0 && cols.length > 0) {
+          const rowInserts = dayData.rows.map((cells, i) => {
+            const cellMap: Record<string, string> = {};
+            for (let j = 0; j < cols.length; j++) {
+              cellMap[cols[j].id] = cells[j] ?? "";
+            }
+            return { day_id: newDay.id, order: i, cells: cellMap };
+          });
+          const { data: createdRows } = await tables.dayRows.createMany(rowInserts);
+          newRowsByDayId.set(newDay.id, createdRows ?? []);
+        } else {
+          newRowsByDayId.set(newDay.id, []);
+        }
+      }
+
+      setWeeks((prev) => [...prev, newWeek]);
+      setDaysByWeekId((prev) => {
+        const next = new Map(prev);
+        next.set(newWeek.id, newDays);
+        return next;
+      });
+      setColumnsByDayId((prev) => {
+        const next = new Map(prev);
+        for (const [dayId, cols] of newColsByDayId) next.set(dayId, cols);
+        return next;
+      });
+      setRowsByDayId((prev) => {
+        const next = new Map(prev);
+        for (const [dayId, rows] of newRowsByDayId) next.set(dayId, rows);
+        return next;
+      });
+
+      return newWeek;
+    },
+    [blockId, weeks.length],
+  );
+
   // --- Day mutations ---
 
   const deleteDay = useCallback(
@@ -677,6 +819,8 @@ export function BlockCacheProvider({
     addWeek,
     deleteWeek,
     duplicateWeek,
+    importWeek,
+    importDay,
     deleteDay,
     updateDay,
     cacheInsertDay,

@@ -34,6 +34,7 @@ export function StatsDetail({ program, onBack }: StatsDetailProps) {
   const [draftReps, setDraftReps] = useState("");
   const [draftWeight, setDraftWeight] = useState("");
   const [draftRpe, setDraftRpe] = useState("__none__");
+  const [draftPlannedRpe, setDraftPlannedRpe] = useState("__none__");
   const [sleepAdjustmentEnabled, setSleepAdjustmentEnabled] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<{
@@ -60,6 +61,7 @@ export function StatsDetail({ program, onBack }: StatsDetailProps) {
       setDraftReps(fetchedSettings.reps_label);
       setDraftWeight(fetchedSettings.weight_label);
       setDraftRpe(fetchedSettings.rpe_label ?? "__none__");
+      setDraftPlannedRpe(fetchedSettings.planned_rpe_label ?? "__none__");
       setSettingsOpen(false);
     } else {
       setDraftExercise("");
@@ -67,6 +69,7 @@ export function StatsDetail({ program, onBack }: StatsDetailProps) {
       setDraftReps("");
       setDraftWeight("");
       setDraftRpe("__none__");
+      setDraftPlannedRpe("__none__");
       setSettingsOpen(true);
     }
 
@@ -134,6 +137,7 @@ export function StatsDetail({ program, onBack }: StatsDetailProps) {
       reps_label: draftReps,
       weight_label: draftWeight,
       rpe_label: draftRpe === "__none__" ? null : draftRpe,
+      planned_rpe_label: draftPlannedRpe === "__none__" ? null : draftPlannedRpe,
     });
 
     setIsSaving(false);
@@ -259,8 +263,25 @@ export function StatsDetail({ program, onBack }: StatsDetailProps) {
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label>RPE column (optional)</Label>
+                    <Label>Actual RPE column (optional)</Label>
                     <Select value={draftRpe} onValueChange={setDraftRpe}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select column" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">None</SelectItem>
+                        {columnLabels.map((label) => (
+                          <SelectItem key={label} value={label}>
+                            {label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Planned RPE column (optional)</Label>
+                    <p className="text-xs text-muted-foreground">Used for weight prediction. Falls back to actual RPE if not set.</p>
+                    <Select value={draftPlannedRpe} onValueChange={setDraftPlannedRpe}>
                       <SelectTrigger>
                         <SelectValue placeholder="Select column" />
                       </SelectTrigger>

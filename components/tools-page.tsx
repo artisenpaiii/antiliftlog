@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { Calculator, ArrowLeft } from "lucide-react";
+import { Calculator, ArrowLeft, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { RpeCalculator } from "@/components/rpe-calculator";
+import { OneRmCalculator } from "@/components/one-rm-calculator";
 import type { UserMetadata } from "@/lib/types/database";
 
 interface ToolsPageProps {
@@ -37,6 +38,29 @@ export function ToolsPage({ initialMetadata }: ToolsPageProps) {
     );
   }
 
+  if (selectedTool === "one-rm-predictor") {
+    return (
+      <div className="flex flex-col gap-6">
+        <div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setSelectedTool(null)}
+            className="mb-2 -ml-2 text-muted-foreground"
+          >
+            <ArrowLeft size={16} className="mr-1" />
+            Back to Tools
+          </Button>
+          <h1 className="text-2xl font-semibold tracking-tight">1RM Predictor</h1>
+          <p className="text-muted-foreground text-sm mt-1">
+            Estimate your 1 rep max from a performed set using weight, reps, and RPE.
+          </p>
+        </div>
+        <OneRmCalculator initialMetadata={initialMetadata} />
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-8">
       <div>
@@ -57,6 +81,22 @@ export function ToolsPage({ initialMetadata }: ToolsPageProps) {
               <CardTitle>RPE Calculator</CardTitle>
               <CardDescription>
                 Find working weights from your 1RM using the RPE scale.
+              </CardDescription>
+            </div>
+          </CardHeader>
+        </Card>
+        <Card
+          className="cursor-pointer transition-colors hover:bg-accent/50"
+          onClick={() => setSelectedTool("one-rm-predictor")}
+        >
+          <CardHeader className="flex flex-row items-center gap-4">
+            <div className="rounded-md bg-primary/10 p-2.5">
+              <TrendingUp size={20} className="text-primary" />
+            </div>
+            <div className="space-y-1">
+              <CardTitle>1RM Predictor</CardTitle>
+              <CardDescription>
+                Predict your 1 rep max from a performed set and RPE.
               </CardDescription>
             </div>
           </CardHeader>

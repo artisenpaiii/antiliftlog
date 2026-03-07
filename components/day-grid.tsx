@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useMemo, useCallback, useEffect } from "react";
+import { useState, useRef, useMemo, useCallback, useEffect, useContext } from "react";
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, horizontalListSortingStrategy, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
 import { X } from "lucide-react";
@@ -16,9 +16,11 @@ import {
 import { CellInput } from "@/components/auto-save-input";
 import { SortableColumnHeader } from "@/components/sortable-column-header";
 import { SortableRow } from "@/components/sortable-row";
+import { PredictionContext } from "@/lib/contexts/prediction-context";
 import type { DayColumn, DayRow } from "@/lib/types/database";
 
 interface DayGridProps {
+  dayId: string;
   columns: DayColumn[];
   rows: DayRow[];
   onColumnsReordered?: (columns: DayColumn[]) => void;
@@ -36,8 +38,9 @@ function buildLocalCells(rows: DayRow[]): Map<string, Record<string, string>> {
   return map;
 }
 
-export function DayGrid({ columns, rows, onColumnsReordered, onRowsReordered, onRowDeleted, onColumnDeleted, onCellSaved }: DayGridProps) {
+export function DayGrid({ dayId, columns, rows, onColumnsReordered, onRowsReordered, onRowDeleted, onColumnDeleted, onCellSaved }: DayGridProps) {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }), useSensor(KeyboardSensor));
+  const prediction = useContext(PredictionContext);
 
   const columnIds = useMemo(() => new Set(columns.map((c) => c.id)), [columns]);
 
@@ -94,15 +97,29 @@ export function DayGrid({ columns, rows, onColumnsReordered, onRowsReordered, on
     );
   }, [localCells, rows, onCellSaved]);
 
-  const [deleteTarget, setDeleteTarget] = useState<{ type: "row"; id: string } | { type: "column"; id: string; label: string } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ type: "row"; id: string } | { type: "column"; id: string; label: string } | { type: "clear"; id: string; label: string } | null>(null);
 
   function confirmDelete() {
     if (!deleteTarget) return;
 
     if (deleteTarget.type === "row") {
       onRowDeleted?.(deleteTarget.id);
-    } else {
+    } else if (deleteTarget.type === "column") {
       onColumnDeleted?.(deleteTarget.id);
+    } else {
+      const colId = deleteTarget.id;
+      setLocalCells((prev) => {
+        const next = new Map(prev);
+        for (const [rowId, cells] of prev) {
+          if (colId in cells) {
+            const updated = { ...cells };
+            delete updated[colId];
+            next.set(rowId, updated);
+            onCellSaved?.(rowId, updated);
+          }
+        }
+        return next;
+      });
     }
 
     setDeleteTarget(null);
@@ -146,6 +163,7 @@ export function DayGrid({ columns, rows, onColumnsReordered, onRowsReordered, on
                     key={col.id}
                     id={col.id}
                     label={col.label}
+                    onClear={() => setDeleteTarget({ type: "clear", id: col.id, label: col.label })}
                     onDelete={() => setDeleteTarget({ type: "column", id: col.id, label: col.label })}
                   />
                 ))}
@@ -157,15 +175,28 @@ export function DayGrid({ columns, rows, onColumnsReordered, onRowsReordered, on
             <tbody>
               {rows.map((row) => (
                 <SortableRow key={row.id} id={row.id} saved={savedRows.has(row.id)}>
-                  {columns.map((col) => (
-                    <td key={col.id} className="px-2 py-1.5">
-                      <CellInput
-                        value={localCells.get(row.id)?.[col.id] ?? ""}
-                        onChange={(val) => handleCellChange(row.id, col.id, val)}
-                        onBlur={() => handleCellBlur(row.id)}
-                      />
-                    </td>
-                  ))}
+                  {columns.map((col) => {
+                    const currentCells = localCells.get(row.id) ?? {};
+                    const cellValue = currentCells[col.id] ?? "";
+                    const isWeightCol =
+                      prediction !== null &&
+                      prediction.weightLabel !== null &&
+                      col.label === prediction.weightLabel;
+                    const placeholder =
+                      isWeightCol && !cellValue
+                        ? (prediction!.predictWeight(currentCells, columns, dayId) ?? undefined)
+                        : undefined;
+                    return (
+                      <td key={col.id} className="px-2 py-1.5">
+                        <CellInput
+                          value={cellValue}
+                          onChange={(val) => handleCellChange(row.id, col.id, val)}
+                          onBlur={() => handleCellBlur(row.id)}
+                          placeholder={placeholder}
+                        />
+                      </td>
+                    );
+                  })}
                   <td className="w-8 px-1 py-1.5">
                     <button
                       type="button"
@@ -186,12 +217,14 @@ export function DayGrid({ columns, rows, onColumnsReordered, onRowsReordered, on
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              Delete {deleteTarget?.type === "column" ? "Column" : "Row"}
+              {deleteTarget?.type === "clear" ? "Clear Column" : `Delete ${deleteTarget?.type === "column" ? "Column" : "Row"}`}
             </DialogTitle>
             <DialogDescription>
-              {deleteTarget?.type === "column"
-                ? <>Are you sure you want to delete the <span className="font-medium text-foreground">{deleteTarget.label}</span> column? This will remove the column and its data from all rows.</>
-                : "Are you sure you want to delete this row? This action cannot be undone."}
+              {deleteTarget?.type === "clear"
+                ? <>Clear all values from the <span className="font-medium text-foreground">{deleteTarget.label}</span> column? The column itself will remain.</>
+                : deleteTarget?.type === "column"
+                  ? <>Are you sure you want to delete the <span className="font-medium text-foreground">{deleteTarget.label}</span> column? This will remove the column and its data from all rows.</>
+                  : "Are you sure you want to delete this row? This action cannot be undone."}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -199,7 +232,7 @@ export function DayGrid({ columns, rows, onColumnsReordered, onRowsReordered, on
               Cancel
             </Button>
             <Button variant="destructive" onClick={confirmDelete}>
-              Delete
+              {deleteTarget?.type === "clear" ? "Clear" : "Delete"}
             </Button>
           </DialogFooter>
         </DialogContent>

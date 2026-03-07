@@ -1,18 +1,37 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowLeft, Calendar, Plus, Loader2, MoreHorizontal, Copy, Trash2 } from "lucide-react";
+import { ArrowLeft, Calendar, Plus, Loader2, MoreHorizontal, Copy, Trash2, Upload, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { WeekContent } from "@/components/week-content";
+import { ImportWeekDialog } from "@/components/import-week-dialog";
 import { BlockCacheProvider, useBlockCache } from "@/lib/contexts/block-cache-context";
+import { PredictionProvider, usePrediction } from "@/lib/contexts/prediction-context";
+import { cn } from "@/lib/utils";
 import type { Block, Week } from "@/lib/types/database";
 
 interface BlockDetailProps {
   block: Block;
   onBack?: () => void;
+}
+
+function FatigueToggleButton() {
+  const { fatigueEnabled, toggleFatigue, isPredictionAvailable } = usePrediction();
+  if (!isPredictionAvailable) return null;
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      className="h-7 w-7"
+      onClick={toggleFatigue}
+      title="Residual fatigue adjustment"
+    >
+      <Zap size={14} className={cn(fatigueEnabled ? "text-amber-400" : "text-muted-foreground")} />
+    </Button>
+  );
 }
 
 export function BlockDetail({ block, onBack }: BlockDetailProps) {
@@ -37,6 +56,9 @@ function BlockDetailInner({ block, onBack }: BlockDetailProps) {
 
   // Duplicate week state
   const [duplicating, setDuplicating] = useState<string | null>(null);
+
+  // Import week state
+  const [importWeekOpen, setImportWeekOpen] = useState(false);
 
   // Auto-select first tab when weeks load
   if (!loading && weeks.length > 0 && !selectedTab) {
@@ -136,6 +158,7 @@ function BlockDetailInner({ block, onBack }: BlockDetailProps) {
   }
 
   return (
+    <PredictionProvider programId={block.program_id}>
     <div className="flex flex-col h-full overflow-y-auto p-6">
       {backButton}
       <Tabs value={selectedTab} onValueChange={setSelectedTab} className="flex flex-col flex-1 min-h-0">
@@ -167,6 +190,10 @@ function BlockDetailInner({ block, onBack }: BlockDetailProps) {
           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleCreateWeek} disabled={creatingWeek}>
             {creatingWeek ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
           </Button>
+          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setImportWeekOpen(true)} title="Import Week">
+            <Upload size={14} />
+          </Button>
+          <FatigueToggleButton />
         </div>
 
         <div className="flex-1 overflow-y-auto min-h-0">
@@ -177,6 +204,12 @@ function BlockDetailInner({ block, onBack }: BlockDetailProps) {
           ))}
         </div>
       </Tabs>
+
+      <ImportWeekDialog
+        open={importWeekOpen}
+        onOpenChange={setImportWeekOpen}
+        onWeekImported={(week) => setSelectedTab(week.id)}
+      />
 
       {/* Delete Week Dialog */}
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
@@ -200,5 +233,6 @@ function BlockDetailInner({ block, onBack }: BlockDetailProps) {
         </DialogContent>
       </Dialog>
     </div>
+    </PredictionProvider>
   );
 }

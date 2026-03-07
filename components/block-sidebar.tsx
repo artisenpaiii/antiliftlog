@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Layers, Plus, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { Layers, Plus, MoreHorizontal, Pencil, Trash2, Upload } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { createTables } from "@/lib/db";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ImportBlockDialog } from "@/components/import-block-dialog";
 import { cn } from "@/lib/utils";
 import type { Block } from "@/lib/types/database";
 
@@ -44,6 +45,7 @@ export function BlockSidebar({
   onBlockDeleted,
 }: BlockSidebarProps) {
   const [createOpen, setCreateOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [name, setName] = useState("");
   const [startDate, setStartDate] = useState("");
   const [isCreating, setIsCreating] = useState(false);
@@ -180,14 +182,25 @@ export function BlockSidebar({
         <span className="text-sm font-medium text-muted-foreground">
           Blocks
         </span>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7"
-          onClick={() => setCreateOpen(true)}
-        >
-          <Plus size={16} />
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            onClick={() => setImportOpen(true)}
+            title="Import Block"
+          >
+            <Upload size={16} />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            onClick={() => setCreateOpen(true)}
+          >
+            <Plus size={16} />
+          </Button>
+        </div>
       </div>
 
       {blocks.length === 0 ? (
@@ -354,6 +367,17 @@ export function BlockSidebar({
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Import Block Dialog */}
+      <ImportBlockDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        programId={programId}
+        nextBlockOrder={blocks.length}
+        onBlockImported={(block) => {
+          onBlockCreated(block);
+        }}
+      />
 
       {/* Delete Block Dialog */}
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>

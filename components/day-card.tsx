@@ -275,6 +275,7 @@ export function DayCard({ day }: DayCardProps) {
       {expanded && (
         <>
           <DayGrid
+            dayId={day.id}
             columns={columns}
             rows={rows}
             onColumnsReordered={(reordered) => reorderColumns(day.id, reordered)}

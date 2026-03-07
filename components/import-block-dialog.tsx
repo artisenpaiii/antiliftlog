@@ -1,0 +1,222 @@
+"use client";
+
+import { useState } from "react";
+import { ClipboardCopy } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
+import { createTables } from "@/lib/db";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { parseBlockImport } from "@/lib/import/parse";
+import type { Block, DayColumn, DayRow } from "@/lib/types/database";
+
+const BLOCK_PROMPT = `Generate a training block JSON for LiftLog. Use exactly this schema:
+
+{
+  "name": "string (required)",
+  "start_date": "YYYY-MM-DD (optional)",
+  "weeks": [
+    {
+      "days": [
+        {
+          "name": "string (optional)",
+          "week_day_index": 0-6 or null (0=Mon, 6=Sun),
+          "columns": ["Exercise", "Sets", "Reps", "Weight", "RPE"],
+          "rows": [["exercise name", "sets", "reps", "weight", "rpe"], ...]
+        }
+      ]
+    }
+  ]
+}
+
+Rules:
+- name is required
+- columns is an array of column header strings
+- rows is an array of arrays; each inner array matches the columns order
+- all values are strings
+- Output only valid JSON, no explanation`;
+
+interface ImportBlockDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  programId: string;
+  nextBlockOrder: number;
+  onBlockImported: (block: Block) => void;
+}
+
+export function ImportBlockDialog({
+  open,
+  onOpenChange,
+  programId,
+  nextBlockOrder,
+  onBlockImported,
+}: ImportBlockDialogProps) {
+  const [json, setJson] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  function handleOpenChange(next: boolean) {
+    onOpenChange(next);
+    if (!next) {
+      setJson("");
+      setError(null);
+      setPreview(null);
+    }
+  }
+
+  async function handleCopyPrompt() {
+    await navigator.clipboard.writeText(BLOCK_PROMPT);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  async function handleImport() {
+    setError(null);
+    setPreview(null);
+
+    let parsed;
+    try {
+      parsed = parseBlockImport(JSON.parse(json));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Invalid JSON");
+      return;
+    }
+
+    const weekCount = parsed.weeks.length;
+    const dayCount = parsed.weeks.reduce((sum, w) => sum + w.days.length, 0);
+    const totalRows = parsed.weeks.reduce(
+      (sum, w) => sum + w.days.reduce((s, d) => s + d.rows.length, 0),
+      0,
+    );
+    setPreview(`${weekCount} week(s), ${dayCount} day(s), ${totalRows} total rows`);
+
+    setIsImporting(true);
+
+    const supabase = createClient();
+    const tables = createTables(supabase);
+
+    const { data: newBlock, error: blockError } = await tables.blocks.create({
+      program_id: programId,
+      name: parsed.name,
+      order: nextBlockOrder,
+      start_date: parsed.start_date ?? null,
+    });
+
+    if (blockError || !newBlock) {
+      setError("Failed to create block. Please try again.");
+      setIsImporting(false);
+      return;
+    }
+
+    for (let wi = 0; wi < parsed.weeks.length; wi++) {
+      const weekData = parsed.weeks[wi];
+      const { data: newWeek } = await tables.weeks.create({
+        block_id: newBlock.id,
+        week_number: wi + 1,
+      });
+      if (!newWeek) continue;
+
+      for (let di = 0; di < weekData.days.length; di++) {
+        const dayData = weekData.days[di];
+        const { data: newDay } = await tables.days.create({
+          week_id: newWeek.id,
+          day_number: di + 1,
+          name: dayData.name ?? null,
+          week_day_index: dayData.week_day_index ?? null,
+        });
+        if (!newDay) continue;
+
+        const columnInserts = dayData.columns.map((label, i) => ({
+          day_id: newDay.id,
+          label,
+          order: i,
+        }));
+        const { data: newCols } = await tables.dayColumns.createMany(columnInserts);
+        const cols: DayColumn[] = newCols ?? [];
+
+        if (dayData.rows.length > 0 && cols.length > 0) {
+          const rowInserts = dayData.rows.map((cells, i) => {
+            const cellMap: Record<string, string> = {};
+            for (let j = 0; j < cols.length; j++) {
+              cellMap[cols[j].id] = cells[j] ?? "";
+            }
+            return { day_id: newDay.id, order: i, cells: cellMap };
+          });
+          await tables.dayRows.createMany(rowInserts);
+        }
+      }
+    }
+
+    setIsImporting(false);
+    onBlockImported(newBlock);
+    handleOpenChange(false);
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Import Block</DialogTitle>
+          <DialogDescription>
+            Paste JSON generated by an AI assistant to create a full training block with weeks and days.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-3 py-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleCopyPrompt}
+            className="gap-2"
+          >
+            <ClipboardCopy size={14} />
+            {copied ? "Copied!" : "Copy AI prompt"}
+          </Button>
+
+          <Textarea
+            value={json}
+            onChange={(e) => {
+              setJson(e.target.value);
+              setError(null);
+              setPreview(null);
+            }}
+            placeholder='{"name": "Hypertrophy Block", "weeks": [{"days": [{"columns": ["Exercise", "Sets", "Reps"], "rows": [["Squat", "3", "5"]]}]}]}'
+            className="min-h-[180px] font-mono text-xs"
+          />
+
+          {preview && (
+            <p className="text-sm text-muted-foreground">{preview}</p>
+          )}
+          {error && <p className="text-sm text-destructive">{error}</p>}
+        </div>
+
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => handleOpenChange(false)}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            onClick={handleImport}
+            disabled={isImporting || !json.trim()}
+          >
+            {isImporting ? "Importing..." : "Import"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
