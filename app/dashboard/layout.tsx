@@ -8,7 +8,7 @@ import { Suspense } from "react";
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-svh flex">
-      <aside className="hidden md:flex w-56 shrink-0 border-r border-border/40 flex-col px-3 py-4">
+      <aside className="hidden md:flex w-56 lg:w-60 shrink-0 border-r border-border/40 flex-col px-3 py-4 pt-[env(safe-area-inset-top)]">
         <Link href="/dashboard" className="flex items-center gap-2 font-semibold px-3 mb-6">
           <Dumbbell size={20} className="text-primary" />
           <span>LiftLog</span>
@@ -22,7 +22,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <LogoutButton />
         </div>
       </aside>
-      <main className="flex flex-col flex-1 px-4 py-6 md:px-8 md:py-8 pb-20 md:pb-8 overflow-auto">{children}</main>
+      <main className="flex flex-col flex-1 px-4 py-6 md:px-8 md:py-8 pt-safe pb-nav-safe md:pb-8 md:pt-6 overflow-auto">{children}</main>
       <MobileNav />
     </div>
   );
