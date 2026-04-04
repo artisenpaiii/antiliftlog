@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Loader2, Trash2, ChevronRight, Moon } from "lucide-react";
+import { Plus, Loader2, Trash2, ChevronRight, Moon, SeparatorHorizontal, TableProperties } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -61,6 +61,9 @@ export function DayCard({ day }: DayCardProps) {
   const rows = getRows(day.id);
   const expanded = expandedDays.has(day.id);
   const [addingRow, setAddingRow] = useState(false);
+  const [addRowOpen, setAddRowOpen] = useState(false);
+  const [separatorLabel, setSeparatorLabel] = useState("");
+  const [addRowMode, setAddRowMode] = useState<"choose" | "separator">("choose");
   const [showColumnInput, setShowColumnInput] = useState(false);
   const [addingColumn, setAddingColumn] = useState(false);
   const [newColumnLabel, setNewColumnLabel] = useState("");
@@ -78,13 +81,29 @@ export function DayCard({ day }: DayCardProps) {
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  async function handleAddRow() {
+  async function handleAddDataRow() {
     setAddingRow(true);
+    setAddRowOpen(false);
     await addRow(day.id, {
       day_id: day.id,
       order: rows.length,
       cells: {},
     });
+    setAddingRow(false);
+  }
+
+  async function handleAddSeparatorRow() {
+    const label = separatorLabel.trim();
+    if (!label) return;
+    setAddingRow(true);
+    setAddRowOpen(false);
+    await addRow(day.id, {
+      day_id: day.id,
+      order: rows.length,
+      cells: { __separator_label: label },
+    });
+    setSeparatorLabel("");
+    setAddRowMode("choose");
     setAddingRow(false);
   }
 
@@ -294,7 +313,7 @@ export function DayCard({ day }: DayCardProps) {
             <Button
               variant="ghost"
               size="sm"
-              onClick={handleAddRow}
+              onClick={() => { setAddRowMode("choose"); setSeparatorLabel(""); setAddRowOpen(true); }}
               disabled={addingRow}
               className="text-muted-foreground"
             >
@@ -435,6 +454,79 @@ export function DayCard({ day }: DayCardProps) {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Row Dialog */}
+      <Dialog
+        open={addRowOpen}
+        onOpenChange={(open) => {
+          setAddRowOpen(open);
+          if (!open) {
+            setAddRowMode("choose");
+            setSeparatorLabel("");
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add Row</DialogTitle>
+            <DialogDescription>
+              Choose what type of row to add.
+            </DialogDescription>
+          </DialogHeader>
+          {addRowMode === "choose" ? (
+            <div className="flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={handleAddDataRow}
+                className="flex items-center gap-3 rounded-lg border border-border p-4 text-left transition-colors hover:bg-muted/50"
+              >
+                <TableProperties size={20} className="text-muted-foreground shrink-0" />
+                <div>
+                  <p className="text-sm font-medium">Data Row</p>
+                  <p className="text-xs text-muted-foreground">A regular row for entering exercise data</p>
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setAddRowMode("separator")}
+                className="flex items-center gap-3 rounded-lg border border-border p-4 text-left transition-colors hover:bg-muted/50"
+              >
+                <SeparatorHorizontal size={20} className="text-muted-foreground shrink-0" />
+                <div>
+                  <p className="text-sm font-medium">Separator</p>
+                  <p className="text-xs text-muted-foreground">A label row to group exercises (e.g. Main Lifts, Accessories)</p>
+                </div>
+              </button>
+            </div>
+          ) : (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleAddSeparatorRow();
+              }}
+            >
+              <Input
+                value={separatorLabel}
+                onChange={(e) => setSeparatorLabel(e.target.value)}
+                placeholder="e.g. Main Lifts, Accessories..."
+                autoFocus
+              />
+              <DialogFooter className="mt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setAddRowMode("choose")}
+                >
+                  Back
+                </Button>
+                <Button type="submit" disabled={!separatorLabel.trim()}>
+                  Add
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
         </DialogContent>
       </Dialog>
 

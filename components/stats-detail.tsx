@@ -228,7 +228,7 @@ export function StatsDetail({ program, onBack }: StatsDetailProps) {
             <button
               type="button"
               onClick={onBack}
-              className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors md:hidden"
+              className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors lg:hidden"
             >
               <ArrowLeft size={14} />
               Back

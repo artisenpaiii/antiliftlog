@@ -68,8 +68,8 @@ export function ProgramDetail({ program, initialBlocks }: ProgramDetailProps) {
       <div className="flex min-h-0 flex-1 rounded-lg border bg-card">
         <div
           className={cn(
-            "md:w-56 lg:w-64 md:shrink-0 md:border-r",
-            selectedBlockId ? "hidden md:block" : "w-full"
+            "lg:w-64 lg:shrink-0 lg:border-r",
+            selectedBlockId ? "hidden lg:block" : "w-full"
           )}
         >
           <BlockSidebar
@@ -85,7 +85,7 @@ export function ProgramDetail({ program, initialBlocks }: ProgramDetailProps) {
         <div
           className={cn(
             "flex-1",
-            selectedBlockId ? "w-full" : "hidden md:block"
+            selectedBlockId ? "w-full" : "hidden lg:block"
           )}
         >
           {selectedBlock ? (

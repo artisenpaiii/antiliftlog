@@ -47,8 +47,8 @@ export function CompetitionsPage({ initialCompetitions }: CompetitionsPageProps)
       <div className="flex min-h-0 flex-1 rounded-lg border bg-card">
         <div
           className={cn(
-            "md:w-56 lg:w-64 md:shrink-0 md:border-r",
-            selectedCompetitionId ? "hidden md:block" : "w-full",
+            "lg:w-64 lg:shrink-0 lg:border-r",
+            selectedCompetitionId ? "hidden lg:block" : "w-full",
           )}
         >
           <CompetitionSidebar
@@ -62,7 +62,7 @@ export function CompetitionsPage({ initialCompetitions }: CompetitionsPageProps)
         <div
           className={cn(
             "flex-1",
-            selectedCompetitionId ? "w-full" : "hidden md:block",
+            selectedCompetitionId ? "w-full" : "hidden lg:block",
           )}
         >
           {selectedCompetition ? (

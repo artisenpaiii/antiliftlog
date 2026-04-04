@@ -3,7 +3,7 @@
 import { useState, useRef, useMemo, useCallback, useEffect, useContext } from "react";
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, horizontalListSortingStrategy, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
-import { X } from "lucide-react";
+import { X, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -97,6 +97,9 @@ export function DayGrid({ dayId, columns, rows, onColumnsReordered, onRowsReorde
     );
   }, [localCells, rows, onCellSaved]);
 
+  const [editingSeparator, setEditingSeparator] = useState<string | null>(null);
+  const [editingSeparatorLabel, setEditingSeparatorLabel] = useState("");
+
   const [deleteTarget, setDeleteTarget] = useState<{ type: "row"; id: string } | { type: "column"; id: string; label: string } | { type: "clear"; id: string; label: string } | null>(null);
 
   function confirmDelete() {
@@ -173,41 +176,102 @@ export function DayGrid({ dayId, columns, rows, onColumnsReordered, onRowsReorde
           </thead>
           <SortableContext items={rows.map((r) => r.id)} strategy={verticalListSortingStrategy}>
             <tbody>
-              {rows.map((row) => (
-                <SortableRow key={row.id} id={row.id} saved={savedRows.has(row.id)}>
-                  {columns.map((col) => {
-                    const currentCells = localCells.get(row.id) ?? {};
-                    const cellValue = currentCells[col.id] ?? "";
-                    const isWeightCol =
-                      prediction !== null &&
-                      prediction.weightLabel !== null &&
-                      col.label === prediction.weightLabel;
-                    const placeholder =
-                      isWeightCol && !cellValue
-                        ? (prediction!.predictWeight(currentCells, columns, dayId) ?? undefined)
-                        : undefined;
-                    return (
-                      <td key={col.id} className="px-2 py-1.5">
-                        <CellInput
-                          value={cellValue}
-                          onChange={(val) => handleCellChange(row.id, col.id, val)}
-                          onBlur={() => handleCellBlur(row.id)}
-                          placeholder={placeholder}
-                        />
+              {rows.map((row) => {
+                const isSeparator = "__separator_label" in (row.cells ?? {});
+
+                if (isSeparator) {
+                  const label = row.cells.__separator_label ?? "";
+                  return (
+                    <SortableRow key={row.id} id={row.id} saved={savedRows.has(row.id)}>
+                      <td
+                        colSpan={columns.length}
+                        className="px-2 py-2"
+                      >
+                        {editingSeparator === row.id ? (
+                          <input
+                            className="w-full bg-transparent text-xs font-semibold uppercase tracking-wider text-muted-foreground outline-none border-b border-primary"
+                            value={editingSeparatorLabel}
+                            onChange={(e) => setEditingSeparatorLabel(e.target.value)}
+                            onBlur={() => {
+                              const trimmed = editingSeparatorLabel.trim();
+                              if (trimmed && trimmed !== label) {
+                                onCellSaved?.(row.id, { __separator_label: trimmed });
+                              }
+                              setEditingSeparator(null);
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                              if (e.key === "Escape") setEditingSeparator(null);
+                            }}
+                            autoFocus
+                          />
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                              {label}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingSeparator(row.id);
+                                setEditingSeparatorLabel(label);
+                              }}
+                              className="opacity-0 group-hover:opacity-100 text-muted-foreground/50 hover:text-muted-foreground transition-opacity"
+                            >
+                              <Pencil size={10} />
+                            </button>
+                          </div>
+                        )}
                       </td>
-                    );
-                  })}
-                  <td className="w-8 px-1 py-1.5">
-                    <button
-                      type="button"
-                      onClick={() => setDeleteTarget({ type: "row", id: row.id })}
-                      className="opacity-0 group-hover:opacity-100 text-muted-foreground/50 hover:text-destructive transition-opacity"
-                    >
-                      <X size={12} />
-                    </button>
-                  </td>
-                </SortableRow>
-              ))}
+                      <td className="w-8 px-1 py-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setDeleteTarget({ type: "row", id: row.id })}
+                          className="opacity-0 group-hover:opacity-100 text-muted-foreground/50 hover:text-destructive transition-opacity"
+                        >
+                          <X size={12} />
+                        </button>
+                      </td>
+                    </SortableRow>
+                  );
+                }
+
+                return (
+                  <SortableRow key={row.id} id={row.id} saved={savedRows.has(row.id)}>
+                    {columns.map((col) => {
+                      const currentCells = localCells.get(row.id) ?? {};
+                      const cellValue = currentCells[col.id] ?? "";
+                      const isWeightCol =
+                        prediction !== null &&
+                        prediction.weightLabel !== null &&
+                        col.label === prediction.weightLabel;
+                      const placeholder =
+                        isWeightCol && !cellValue
+                          ? (prediction!.predictWeight(currentCells, columns, dayId) ?? undefined)
+                          : undefined;
+                      return (
+                        <td key={col.id} className="px-2 py-1.5">
+                          <CellInput
+                            value={cellValue}
+                            onChange={(val) => handleCellChange(row.id, col.id, val)}
+                            onBlur={() => handleCellBlur(row.id)}
+                            placeholder={placeholder}
+                          />
+                        </td>
+                      );
+                    })}
+                    <td className="w-8 px-1 py-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setDeleteTarget({ type: "row", id: row.id })}
+                        className="opacity-0 group-hover:opacity-100 text-muted-foreground/50 hover:text-destructive transition-opacity"
+                      >
+                        <X size={12} />
+                      </button>
+                    </td>
+                  </SortableRow>
+                );
+              })}
             </tbody>
           </SortableContext>
         </table>

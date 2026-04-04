@@ -67,8 +67,8 @@ export function StatsPage({
         <div className="flex min-h-0 flex-1 rounded-lg border bg-card">
           <div
             className={cn(
-              "md:w-56 lg:w-64 md:shrink-0 md:border-r",
-              selectedProgramId ? "hidden md:block" : "w-full",
+              "lg:w-64 lg:shrink-0 lg:border-r",
+              selectedProgramId ? "hidden lg:block" : "w-full",
             )}
           >
             <StatsSidebar
@@ -80,7 +80,7 @@ export function StatsPage({
           <div
             className={cn(
               "flex-1",
-              selectedProgramId ? "w-full" : "hidden md:block",
+              selectedProgramId ? "w-full" : "hidden lg:block",
             )}
           >
             {selectedProgram ? (
