@@ -2,6 +2,7 @@ import type { Program, StatsSettings } from "@/lib/types/database";
 import { WEEKDAY_LABELS } from "@/lib/types/database";
 import type { ProgramHierarchy, LiftType } from "./types";
 import { computeVolumeData, computeFatigueData } from "./computations";
+import { LiftParser } from "./lift-parser";
 
 interface ExportDay {
   day_number: number;
@@ -103,10 +104,14 @@ export function formatProgramExport(
     };
   });
 
+  // Parse records for chart computations
+  const parser = new LiftParser();
+  const records = settings ? parser.parseHierarchy(hierarchy, settings) : [];
+
   // Volume
   let volumeSummary: ExportVolumeWeek[] | null = null;
-  if (settings) {
-    const { dataPoints, exercises } = computeVolumeData(hierarchy, settings);
+  if (settings && records.length > 0) {
+    const { dataPoints, exercises } = computeVolumeData(records, hierarchy);
     if (exercises.length > 0) {
       volumeSummary = dataPoints.map((dp) => {
         const exVols: Record<string, number> = {};
@@ -121,8 +126,8 @@ export function formatProgramExport(
 
   // Fatigue
   let fatigueSummary: ExportFatigueDay[] | null = null;
-  if (settings?.rpe_label) {
-    const { dataPoints: fatiguePoints, liftTypes } = computeFatigueData(hierarchy, settings, false);
+  if (settings?.rpe_label && records.length > 0) {
+    const { dataPoints: fatiguePoints, liftTypes } = computeFatigueData(records, hierarchy, false);
     if (fatiguePoints.length > 0) {
       fatigueSummary = fatiguePoints.map((dp) => {
         const scores: Record<string, number> = {};

@@ -1,8 +1,6 @@
 import { getRpePercentage } from "@/lib/rpe-chart";
-import { WEEKDAY_SHORT_LABELS } from "@/lib/types/database";
-import { parseNumber, parseRpe, classifyLift } from "./computations";
-import type { ProgramHierarchy, LiftType } from "./types";
-import type { StatsSettings } from "@/lib/types/database";
+import { buildDayIndex } from "./computations";
+import type { ProgramHierarchy, LiftType, ParsedLiftRecord } from "./types";
 
 export interface E1RMDetails {
   weight: number;
@@ -33,16 +31,37 @@ function movingAverage(values: (number | null)[], window: number): (number | nul
   });
 }
 
-export function computeE1RMData(
-  hierarchy: ProgramHierarchy,
-  settings: StatsSettings,
-): { dataPoints: E1RMDataPoint[]; activeLiftTypes: LiftType[] } {
-  if (!settings.rpe_label || !settings.weight_label) {
-    return { dataPoints: [], activeLiftTypes: [] };
+/** Generate a day label from hierarchy metadata */
+function makeDayLabel(
+  blockStartDate: string | null,
+  blockOrder: number,
+  weekNumber: number,
+  dayNumber: number,
+  weekDayIndex: number | null,
+): string {
+  if (blockStartDate && weekDayIndex !== null) {
+    const start = new Date(blockStartDate + "T00:00:00");
+    const dayOffset = (weekNumber - 1) * 7 + weekDayIndex;
+    const date = new Date(start);
+    date.setDate(start.getDate() + dayOffset);
+    return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
   }
+  if (weekDayIndex !== null) {
+    const WEEKDAY_SHORT: Record<number, string> = {
+      0: "Mon", 1: "Tue", 2: "Wed", 3: "Thu", 4: "Fri", 5: "Sat", 6: "Sun",
+    };
+    return `${WEEKDAY_SHORT[weekDayIndex]} B${blockOrder + 1}W${weekNumber}`;
+  }
+  return `B${blockOrder + 1}W${weekNumber}D${dayNumber}`;
+}
 
+export function computeE1RMData(
+  records: ParsedLiftRecord[],
+  hierarchy: ProgramHierarchy,
+): { dataPoints: E1RMDataPoint[]; activeLiftTypes: LiftType[] } {
   const rawPoints: Omit<E1RMDataPoint, "squatSmoothed" | "benchSmoothed" | "deadliftSmoothed">[] = [];
   const activeLiftTypes = new Set<LiftType>();
+  const dayIndex = buildDayIndex(records);
 
   const sortedBlocks = [...hierarchy.blocks].sort((a, b) => a.block.order - b.block.order);
 
@@ -51,25 +70,16 @@ export function computeE1RMData(
     for (const weekData of sortedWeeks) {
       const sortedDays = [...weekData.days].sort((a, b) => a.day.day_number - b.day.day_number);
       for (const dayData of sortedDays) {
-        let label: string;
-        if (blockData.block.start_date && dayData.day.week_day_index !== null && dayData.day.week_day_index !== undefined) {
-          const start = new Date(blockData.block.start_date + "T00:00:00");
-          const dayOffset = (weekData.week.week_number - 1) * 7 + dayData.day.week_day_index;
-          const date = new Date(start);
-          date.setDate(start.getDate() + dayOffset);
-          label = date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-        } else if (dayData.day.week_day_index !== null && dayData.day.week_day_index !== undefined) {
-          label = `${WEEKDAY_SHORT_LABELS[dayData.day.week_day_index]} B${blockData.block.order + 1}W${weekData.week.week_number}`;
-        } else {
-          label = `B${blockData.block.order + 1}W${weekData.week.week_number}D${dayData.day.day_number}`;
-        }
+        const label = makeDayLabel(
+          blockData.block.start_date ?? null,
+          blockData.block.order,
+          weekData.week.week_number,
+          dayData.day.day_number,
+          dayData.day.week_day_index ?? null,
+        );
 
-        const exerciseCol = dayData.columns.find((c) => c.label === settings.exercise_label);
-        const repsCol = dayData.columns.find((c) => c.label === settings.reps_label);
-        const rpeCol = dayData.columns.find((c) => c.label === settings.rpe_label);
-        const weightCol = dayData.columns.find((c) => c.label === settings.weight_label);
-
-        if (!exerciseCol || !repsCol || !rpeCol || !weightCol) continue;
+        const key = `${blockData.block.order}-${weekData.week.week_number}-${dayData.day.day_number}`;
+        const dayRecords = dayIndex.get(key) ?? [];
 
         const bestByLift: Record<LiftType, { e1rm: number; weight: number; reps: number; rpe: number } | null> = {
           squat: null,
@@ -77,25 +87,16 @@ export function computeE1RMData(
           deadlift: null,
         };
 
-        for (const row of dayData.rows) {
-          const exercise = row.cells[exerciseCol.id]?.trim();
-          if (!exercise) continue;
+        for (const rec of dayRecords) {
+          if (rec.reps <= 0 || rec.rpe <= 0 || rec.weight <= 0) continue;
 
-          const liftType = classifyLift(exercise);
-          if (!liftType) continue;
-
-          const reps = parseNumber(row.cells[repsCol.id]);
-          const rpe = parseRpe(row.cells[rpeCol.id]);
-          const weight = parseNumber(row.cells[weightCol.id]);
-
-          if (reps <= 0 || rpe <= 0 || weight <= 0) continue;
-
-          const pct = getRpePercentage(reps, rpe);
+          const pct = getRpePercentage(rec.reps, rec.rpe);
           if (!pct) continue;
 
-          const e1rm = weight / pct;
+          const e1rm = rec.weight / pct;
+          const liftType = rec.classification.mainLift;
           if (!bestByLift[liftType] || e1rm > bestByLift[liftType]!.e1rm) {
-            bestByLift[liftType] = { e1rm, weight, reps, rpe };
+            bestByLift[liftType] = { e1rm, weight: rec.weight, reps: rec.reps, rpe: rec.rpe };
           }
         }
 

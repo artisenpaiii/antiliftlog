@@ -146,6 +146,7 @@ export interface StatsSettings {
   weight_label: string;
   rpe_label: string | null;
   planned_rpe_label: string | null;
+  variation_label: string | null;
   created_at: string;
   updated_at: string;
 }

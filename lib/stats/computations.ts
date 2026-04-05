@@ -1,7 +1,6 @@
 import type { FatigueDataPoint } from "@/components/fatigue-chart";
-import type { StatsSettings } from "@/lib/types/database";
 import { WEEKDAY_SHORT_LABELS } from "@/lib/types/database";
-import type { ProgramHierarchy, WeekDataPoint, LiftType } from "./types";
+import type { ProgramHierarchy, WeekDataPoint, LiftType, ParsedLiftRecord } from "./types";
 
 export interface UserPRs {
   squat: number | null;
@@ -39,10 +38,6 @@ export const LIFT_MULTIPLIERS: Record<LiftType, number> = {
   deadlift: 1.6,
 };
 
-// Default daily decay of residual fatigue.
-// Interpretation: ~70% of yesterday's fatigue carries into today (≈30% clears per 24h).
-// This produces a ~2-day half-life (0.70² ≈ 0.49), which matches typical 24–72h recovery
-// windows seen in heavy compound lifting (strength performance and neuromuscular recovery).
 export const BASE_DECAY = 0.7;
 
 export function parseNumber(value: string | undefined): number {
@@ -55,7 +50,6 @@ export function parseNumber(value: string | undefined): number {
 export function parseRpe(value: string | undefined): number {
   if (!value) return 0;
   const cleaned = value.replace(/[^0-9.,-]/g, "").replace(",", ".");
-  // Handle ranges like "6-7.5" by taking the upper bound
   const parts = cleaned.split("-").filter((p) => p !== "");
   if (parts.length >= 2) {
     const upper = parseFloat(parts[parts.length - 1]);
@@ -65,31 +59,67 @@ export function parseRpe(value: string | undefined): number {
   return isNaN(num) ? 0 : num;
 }
 
-export function classifyLift(exerciseName: string): LiftType | null {
-  const lower = exerciseName.toLowerCase();
-  if (lower.includes("deadlift") || lower.includes("dead lift")) return "deadlift";
-  if (lower.includes("squat")) return "squat";
-  if (lower.includes("bench")) return "bench";
-  return null;
+/** Build a lookup from day coordinates to parsed records */
+export function buildDayIndex(records: ParsedLiftRecord[]): Map<string, ParsedLiftRecord[]> {
+  const index = new Map<string, ParsedLiftRecord[]>();
+  for (const record of records) {
+    const key = `${record.blockOrder}-${record.weekNumber}-${record.dayNumber}`;
+    const existing = index.get(key);
+    if (existing) {
+      existing.push(record);
+    } else {
+      index.set(key, [record]);
+    }
+  }
+  return index;
 }
 
+/** Generate a day label from hierarchy metadata */
+function makeDayLabel(
+  blockStartDate: string | null,
+  blockOrder: number,
+  weekNumber: number,
+  dayNumber: number,
+  weekDayIndex: number | null,
+): string {
+  if (blockStartDate && weekDayIndex !== null) {
+    const start = new Date(blockStartDate + "T00:00:00");
+    const dayOffset = (weekNumber - 1) * 7 + weekDayIndex;
+    const date = new Date(start);
+    date.setDate(start.getDate() + dayOffset);
+    return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  }
+  if (weekDayIndex !== null) {
+    return `${WEEKDAY_SHORT_LABELS[weekDayIndex]} B${blockOrder + 1}W${weekNumber}`;
+  }
+  return `B${blockOrder + 1}W${weekNumber}D${dayNumber}`;
+}
+
+/** Generate a week label from hierarchy metadata */
+function makeWeekLabel(blockStartDate: string | null, blockOrder: number, weekNumber: number): string {
+  if (blockStartDate) {
+    const start = new Date(blockStartDate + "T00:00:00");
+    const weekOffset = (weekNumber - 1) * 7;
+    const weekStart = new Date(start);
+    weekStart.setDate(start.getDate() + weekOffset);
+    return weekStart.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  }
+  return `B${blockOrder + 1}W${weekNumber}`;
+}
+
+// ==================== Chart Computations ====================
+
 export function computeFatigueData(
+  records: ParsedLiftRecord[],
   hierarchy: ProgramHierarchy,
-  settings: StatsSettings,
   sleepAdjustmentEnabled: boolean,
 ): { dataPoints: FatigueDataPoint[]; liftTypes: LiftType[] } {
   const dataPoints: FatigueDataPoint[] = [];
   const activeLiftTypes = new Set<LiftType>();
+  const dayIndex = buildDayIndex(records);
 
-  if (!settings.rpe_label) {
-    return { dataPoints: [], liftTypes: [] };
-  }
-
-  // Ensure chronological traversal (important for residual fatigue)
   const sortedBlocks = [...hierarchy.blocks].sort((a, b) => a.block.order - b.block.order);
   let residual = 0;
-
-  // Track previous day's position for gap-aware decay
   let prevWeekDayIndex: number | null = null;
   let prevAbsoluteWeek: number | null = null;
   let absoluteWeekOffset = 0;
@@ -98,12 +128,9 @@ export function computeFatigueData(
   for (let blockIdx = 0; blockIdx < sortedBlocks.length; blockIdx++) {
     const blockData = sortedBlocks[blockIdx];
 
-    // At each block boundary, accumulate week offset
     if (blockIdx !== lastBlockIdx) {
       if (lastBlockIdx >= 0) {
-        const prevBlock = sortedBlocks[lastBlockIdx];
-        const prevBlockWeekCount = prevBlock.weeks.length;
-        absoluteWeekOffset += prevBlockWeekCount;
+        absoluteWeekOffset += sortedBlocks[lastBlockIdx].weeks.length;
       }
       lastBlockIdx = blockIdx;
     }
@@ -114,48 +141,25 @@ export function computeFatigueData(
       const currentAbsoluteWeek = absoluteWeekOffset + weekData.week.week_number;
 
       for (const dayData of sortedDays) {
-        let label: string;
-        if (blockData.block.start_date && dayData.day.week_day_index !== null && dayData.day.week_day_index !== undefined) {
-          const start = new Date(blockData.block.start_date + "T00:00:00");
-          const dayOffset = (weekData.week.week_number - 1) * 7 + dayData.day.week_day_index;
-          const date = new Date(start);
-          date.setDate(start.getDate() + dayOffset);
-          label = date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-        } else if (dayData.day.week_day_index !== null && dayData.day.week_day_index !== undefined) {
-          label = `${WEEKDAY_SHORT_LABELS[dayData.day.week_day_index]} B${blockData.block.order + 1}W${weekData.week.week_number}`;
-        } else {
-          label = `B${blockData.block.order + 1}W${weekData.week.week_number}D${dayData.day.day_number}`;
-        }
+        const label = makeDayLabel(
+          blockData.block.start_date ?? null,
+          blockData.block.order,
+          weekData.week.week_number,
+          dayData.day.day_number,
+          dayData.day.week_day_index ?? null,
+        );
 
-        const exerciseCol = dayData.columns.find((c) => c.label === settings.exercise_label);
-        const repsCol = dayData.columns.find((c) => c.label === settings.reps_label);
-        const rpeCol = dayData.columns.find((c) => c.label === settings.rpe_label);
+        const key = `${blockData.block.order}-${weekData.week.week_number}-${dayData.day.day_number}`;
+        const dayRecords = dayIndex.get(key) ?? [];
 
-        const dayScores: Record<LiftType, number> = {
-          squat: 0,
-          bench: 0,
-          deadlift: 0,
-        };
+        const dayScores: Record<LiftType, number> = { squat: 0, bench: 0, deadlift: 0 };
 
-        if (exerciseCol && repsCol && rpeCol) {
-          for (const row of dayData.rows) {
-            const exercise = row.cells[exerciseCol.id]?.trim();
-            if (!exercise) continue;
-
-            const liftType = classifyLift(exercise);
-            if (!liftType) continue;
-
-            const reps = parseNumber(row.cells[repsCol.id]);
-            const rpe = parseRpe(row.cells[rpeCol.id]);
-
-            if (reps <= 0 || rpe <= 0) continue;
-
-            const effort = Math.max(rpe - 5, 0);
-            const setFatigue = reps * effort * LIFT_MULTIPLIERS[liftType];
-            dayScores[liftType] += setFatigue;
-
-            if (setFatigue > 0) activeLiftTypes.add(liftType);
-          }
+        for (const rec of dayRecords) {
+          if (rec.reps <= 0 || rec.rpe <= 0) continue;
+          const effort = Math.max(rec.rpe - 5, 0);
+          const setFatigue = rec.reps * effort * LIFT_MULTIPLIERS[rec.classification.mainLift];
+          dayScores[rec.classification.mainLift] += setFatigue;
+          if (setFatigue > 0) activeLiftTypes.add(rec.classification.mainLift);
         }
 
         let total = dayScores.squat + dayScores.bench + dayScores.deadlift;
@@ -172,7 +176,6 @@ export function computeFatigueData(
         }
 
         let effectiveDecay = BASE_DECAY;
-
         if (sleepAdjustmentEnabled && dayData.day.sleep_quality !== null) {
           const q = Math.max(0, Math.min(100, dayData.day.sleep_quality));
           const sleepFactor = 0.85 + 0.3 * (q / 100);
@@ -180,7 +183,6 @@ export function computeFatigueData(
           effectiveDecay = Math.max(0.55, Math.min(0.85, effectiveDecay));
         }
 
-        // Compute gap between training days for rest-day aware decay
         let decayGap = 1;
         if (
           prevWeekDayIndex !== null &&
@@ -220,50 +222,36 @@ export function computeFatigueData(
   return { dataPoints, liftTypes };
 }
 
-export function computeVolumeData(hierarchy: ProgramHierarchy, settings: StatsSettings): { dataPoints: WeekDataPoint[]; exercises: string[] } {
+export function computeVolumeData(
+  records: ParsedLiftRecord[],
+  hierarchy: ProgramHierarchy,
+): { dataPoints: WeekDataPoint[]; exercises: string[] } {
   const exerciseVolumes: Record<string, Record<string, number>> = {};
   const weekLabels: string[] = [];
 
+  // Build week label list from hierarchy structure
   for (const blockData of hierarchy.blocks) {
     for (const weekData of blockData.weeks) {
-      let label: string;
-      if (blockData.block.start_date) {
-        const start = new Date(blockData.block.start_date + "T00:00:00");
-        const weekOffset = (weekData.week.week_number - 1) * 7;
-        const weekStart = new Date(start);
-        weekStart.setDate(start.getDate() + weekOffset);
-        label = weekStart.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-      } else {
-        label = `B${blockData.block.order + 1}W${weekData.week.week_number}`;
-      }
+      const label = makeWeekLabel(
+        blockData.block.start_date ?? null,
+        blockData.block.order,
+        weekData.week.week_number,
+      );
       weekLabels.push(label);
-
-      for (const dayData of weekData.days) {
-        const exerciseCol = dayData.columns.find((c) => c.label === settings.exercise_label);
-        const setsCol = dayData.columns.find((c) => c.label === settings.sets_label);
-        const repsCol = dayData.columns.find((c) => c.label === settings.reps_label);
-        const weightCol = dayData.columns.find((c) => c.label === settings.weight_label);
-
-        if (!exerciseCol || !setsCol || !repsCol || !weightCol) continue;
-
-        for (const row of dayData.rows) {
-          const exercise = row.cells[exerciseCol.id]?.trim();
-          if (!exercise) continue;
-
-          const sets = parseNumber(row.cells[setsCol.id]);
-          const reps = parseNumber(row.cells[repsCol.id]);
-          const weight = parseNumber(row.cells[weightCol.id]);
-          const volume = sets * reps * weight;
-
-          if (volume <= 0) continue;
-
-          if (!exerciseVolumes[exercise]) {
-            exerciseVolumes[exercise] = {};
-          }
-          exerciseVolumes[exercise][label] = (exerciseVolumes[exercise][label] ?? 0) + volume;
-        }
-      }
     }
+  }
+
+  // Aggregate volume from parsed records
+  for (const rec of records) {
+    const volume = rec.sets * rec.reps * rec.weight;
+    if (volume <= 0) continue;
+
+    const weekLabel = makeWeekLabel(rec.blockStartDate, rec.blockOrder, rec.weekNumber);
+
+    if (!exerciseVolumes[rec.exerciseName]) {
+      exerciseVolumes[rec.exerciseName] = {};
+    }
+    exerciseVolumes[rec.exerciseName][weekLabel] = (exerciseVolumes[rec.exerciseName][weekLabel] ?? 0) + volume;
   }
 
   const exercises = Object.keys(exerciseVolumes).sort();
@@ -283,57 +271,50 @@ export function computeVolumeData(hierarchy: ProgramHierarchy, settings: StatsSe
 }
 
 export function computeIntensityDistribution(
+  records: ParsedLiftRecord[],
   hierarchy: ProgramHierarchy,
-  settings: StatsSettings,
   userPRs: UserPRs,
 ): { dataPoints: IntensityZonePoint[]; hasData: boolean } {
   const dataPoints: IntensityZonePoint[] = [];
   let hasData = false;
 
+  // Index records by week
+  const weekIndex = new Map<string, ParsedLiftRecord[]>();
+  for (const rec of records) {
+    const key = `${rec.blockOrder}-${rec.weekNumber}`;
+    const existing = weekIndex.get(key);
+    if (existing) {
+      existing.push(rec);
+    } else {
+      weekIndex.set(key, [rec]);
+    }
+  }
+
   for (const blockData of hierarchy.blocks) {
     for (const weekData of blockData.weeks) {
-      let label: string;
-      if (blockData.block.start_date) {
-        const start = new Date(blockData.block.start_date + "T00:00:00");
-        const weekOffset = (weekData.week.week_number - 1) * 7;
-        const weekStart = new Date(start);
-        weekStart.setDate(start.getDate() + weekOffset);
-        label = weekStart.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-      } else {
-        label = `B${blockData.block.order + 1}W${weekData.week.week_number}`;
-      }
+      const label = makeWeekLabel(
+        blockData.block.start_date ?? null,
+        blockData.block.order,
+        weekData.week.week_number,
+      );
+
+      const key = `${blockData.block.order}-${weekData.week.week_number}`;
+      const weekRecords = weekIndex.get(key) ?? [];
 
       const point: IntensityZonePoint = { label, zone1: 0, zone2: 0, zone3: 0, zone4: 0 };
 
-      for (const dayData of weekData.days) {
-        const exerciseCol = dayData.columns.find((c) => c.label === settings.exercise_label);
-        const setsCol = dayData.columns.find((c) => c.label === settings.sets_label);
-        const weightCol = dayData.columns.find((c) => c.label === settings.weight_label);
+      for (const rec of weekRecords) {
+        const pr = userPRs[rec.classification.mainLift];
+        if (!pr || pr <= 0) continue;
+        if (rec.sets <= 0 || rec.weight <= 0) continue;
 
-        if (!exerciseCol || !setsCol || !weightCol) continue;
+        const intensity = rec.weight / pr;
+        if (intensity < 0.7) point.zone1 += rec.sets;
+        else if (intensity < 0.8) point.zone2 += rec.sets;
+        else if (intensity < 0.9) point.zone3 += rec.sets;
+        else point.zone4 += rec.sets;
 
-        for (const row of dayData.rows) {
-          const exercise = row.cells[exerciseCol.id]?.trim();
-          if (!exercise) continue;
-
-          const liftType = classifyLift(exercise);
-          if (!liftType) continue;
-
-          const pr = userPRs[liftType];
-          if (!pr || pr <= 0) continue;
-
-          const sets = parseNumber(row.cells[setsCol.id]);
-          const weight = parseNumber(row.cells[weightCol.id]);
-          if (sets <= 0 || weight <= 0) continue;
-
-          const intensity = weight / pr;
-          if (intensity < 0.7) point.zone1 += sets;
-          else if (intensity < 0.8) point.zone2 += sets;
-          else if (intensity < 0.9) point.zone3 += sets;
-          else point.zone4 += sets;
-
-          hasData = true;
-        }
+        hasData = true;
       }
 
       const totalSets = point.zone1 + point.zone2 + point.zone3 + point.zone4;
@@ -346,29 +327,35 @@ export function computeIntensityDistribution(
   return { dataPoints, hasData };
 }
 
-function emptyLiftSummary(): WeeklyLiftSummary {
-  return { sets: 0, totalReps: 0, avgRpe: null, peakWeight: null, volume: 0, avgIntensityPct: null };
-}
-
 export function computeWeeklyLoadSummary(
+  records: ParsedLiftRecord[],
   hierarchy: ProgramHierarchy,
-  settings: StatsSettings,
   userPRs: UserPRs,
 ): WeeklyLoadRow[] {
   const rows: WeeklyLoadRow[] = [];
 
+  // Index records by week
+  const weekIndex = new Map<string, ParsedLiftRecord[]>();
+  for (const rec of records) {
+    const key = `${rec.blockOrder}-${rec.weekNumber}`;
+    const existing = weekIndex.get(key);
+    if (existing) {
+      existing.push(rec);
+    } else {
+      weekIndex.set(key, [rec]);
+    }
+  }
+
   for (const blockData of hierarchy.blocks) {
     for (const weekData of blockData.weeks) {
-      let label: string;
-      if (blockData.block.start_date) {
-        const start = new Date(blockData.block.start_date + "T00:00:00");
-        const weekOffset = (weekData.week.week_number - 1) * 7;
-        const weekStart = new Date(start);
-        weekStart.setDate(start.getDate() + weekOffset);
-        label = weekStart.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-      } else {
-        label = `B${blockData.block.order + 1}W${weekData.week.week_number}`;
-      }
+      const label = makeWeekLabel(
+        blockData.block.start_date ?? null,
+        blockData.block.order,
+        weekData.week.week_number,
+      );
+
+      const key = `${blockData.block.order}-${weekData.week.week_number}`;
+      const weekRecords = weekIndex.get(key) ?? [];
 
       const liftData: Record<LiftType, { sets: number; reps: number[]; rpes: number[]; weights: number[]; volume: number; intensities: number[] }> = {
         squat: { sets: 0, reps: [], rpes: [], weights: [], volume: 0, intensities: [] },
@@ -376,39 +363,18 @@ export function computeWeeklyLoadSummary(
         deadlift: { sets: 0, reps: [], rpes: [], weights: [], volume: 0, intensities: [] },
       };
 
-      for (const dayData of weekData.days) {
-        const exerciseCol = dayData.columns.find((c) => c.label === settings.exercise_label);
-        const setsCol = dayData.columns.find((c) => c.label === settings.sets_label);
-        const repsCol = dayData.columns.find((c) => c.label === settings.reps_label);
-        const weightCol = dayData.columns.find((c) => c.label === settings.weight_label);
-        const rpeCol = settings.rpe_label ? dayData.columns.find((c) => c.label === settings.rpe_label) : undefined;
+      for (const rec of weekRecords) {
+        if (rec.sets <= 0 || rec.reps <= 0 || rec.weight <= 0) continue;
 
-        if (!exerciseCol || !setsCol || !repsCol || !weightCol) continue;
+        const d = liftData[rec.classification.mainLift];
+        d.sets += rec.sets;
+        d.reps.push(rec.reps);
+        d.weights.push(rec.weight);
+        d.volume += rec.sets * rec.reps * rec.weight;
+        if (rec.rpe > 0) d.rpes.push(rec.rpe);
 
-        for (const row of dayData.rows) {
-          const exercise = row.cells[exerciseCol.id]?.trim();
-          if (!exercise) continue;
-
-          const liftType = classifyLift(exercise);
-          if (!liftType) continue;
-
-          const sets = parseNumber(row.cells[setsCol.id]);
-          const reps = parseNumber(row.cells[repsCol.id]);
-          const weight = parseNumber(row.cells[weightCol.id]);
-          const rpe = rpeCol ? parseRpe(row.cells[rpeCol.id]) : 0;
-
-          if (sets <= 0 || reps <= 0 || weight <= 0) continue;
-
-          const d = liftData[liftType];
-          d.sets += sets;
-          d.reps.push(reps);
-          d.weights.push(weight);
-          d.volume += sets * reps * weight;
-          if (rpe > 0) d.rpes.push(rpe);
-
-          const pr = userPRs[liftType];
-          if (pr && pr > 0) d.intensities.push(weight / pr);
-        }
+        const pr = userPRs[rec.classification.mainLift];
+        if (pr && pr > 0) d.intensities.push(rec.weight / pr);
       }
 
       const toSummary = (d: typeof liftData.squat): WeeklyLiftSummary => ({

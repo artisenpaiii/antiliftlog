@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Loader2, Trash2, ChevronRight, Moon, SeparatorHorizontal, TableProperties } from "lucide-react";
+import { Plus, Loader2, Trash2, ChevronRight, Moon, SeparatorHorizontal, TableProperties, MoreVertical, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,7 +14,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
+} from "@/components/ui/dropdown-menu";
 import { DayGrid } from "@/components/day-grid";
 import { useBlockCache } from "@/lib/contexts/block-cache-context";
 import type { Day } from "@/lib/types/database";
@@ -69,6 +78,10 @@ export function DayCard({ day }: DayCardProps) {
   const [newColumnLabel, setNewColumnLabel] = useState("");
   const [reorderError, setReorderError] = useState<string | null>(null);
 
+  // Rename state
+  const [renaming, setRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState("");
+
   // Day info state
   const [infoOpen, setInfoOpen] = useState(false);
   const [savingInfo, setSavingInfo] = useState(false);
@@ -80,6 +93,20 @@ export function DayCard({ day }: DayCardProps) {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  function handleStartRename() {
+    setRenameValue(day.name ?? "");
+    setRenaming(true);
+  }
+
+  async function handleFinishRename() {
+    const trimmed = renameValue.trim();
+    const newName = trimmed === "" ? null : trimmed;
+    if (newName !== day.name) {
+      await updateDay(day.id, { name: newName });
+    }
+    setRenaming(false);
+  }
 
   async function handleAddDataRow() {
     setAddingRow(true);
@@ -201,95 +228,112 @@ export function DayCard({ day }: DayCardProps) {
   return (
     <div className="rounded-lg border border-border">
       <div
-        role="button"
-        tabIndex={0}
-        onClick={() => toggleDay(day.id)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            toggleDay(day.id);
-          }
-        }}
         className={cn(
-          "flex w-full items-center gap-2 px-4 py-3 text-left transition-colors hover:bg-muted/50 cursor-pointer",
+          "flex w-full items-center gap-2 px-4 py-3 transition-colors",
           expanded && "border-b border-border",
         )}
       >
-        <ChevronRight
-          size={14}
-          className={cn(
-            "text-muted-foreground transition-transform duration-150",
-            expanded && "rotate-90",
-          )}
-        />
-        <h4 className="text-sm font-medium flex-1">{dayLabel}</h4>
         <div
-          onClick={(e) => e.stopPropagation()}
-          onKeyDown={(e) => e.stopPropagation()}
-          role="presentation"
+          role="button"
+          tabIndex={0}
+          onClick={() => toggleDay(day.id)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              toggleDay(day.id);
+            }
+          }}
+          className="flex flex-1 items-center gap-2 cursor-pointer hover:bg-muted/50 rounded-md -ml-1 pl-1 py-0.5"
         >
-          <Select
-            value={day.week_day_index !== null && day.week_day_index !== undefined ? String(day.week_day_index) : "__none__"}
-            onValueChange={(val) => {
-              const idx = val === "__none__" ? null : parseInt(val, 10);
-              updateDay(day.id, { week_day_index: idx });
-            }}
-          >
-            <SelectTrigger className="h-7 w-[72px] text-xs px-2 border-none bg-transparent hover:bg-muted">
-              <SelectValue placeholder="Day" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__none__">—</SelectItem>
-              {Object.entries(WEEKDAY_SHORT_LABELS).map(([idx, label]) => (
-                <SelectItem key={idx} value={idx}>
-                  {label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <ChevronRight
+            size={14}
+            className={cn(
+              "text-muted-foreground transition-transform duration-150 shrink-0",
+              expanded && "rotate-90",
+            )}
+          />
+          {renaming ? (
+            <input
+              autoFocus
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              onBlur={handleFinishRename}
+              onKeyDown={(e) => {
+                e.stopPropagation();
+                if (e.key === "Enter") {
+                  handleFinishRename();
+                } else if (e.key === "Escape") {
+                  setRenaming(false);
+                }
+              }}
+              onClick={(e) => e.stopPropagation()}
+              className="text-sm font-medium bg-transparent border-b border-primary outline-none flex-1 min-w-0"
+            />
+          ) : (
+            <h4 className="text-sm font-medium flex-1 truncate">{dayLabel}</h4>
+          )}
         </div>
-        <span className="text-xs text-muted-foreground">
+        <span className="text-xs text-muted-foreground shrink-0">
           {rows.length} {rows.length === 1 ? "row" : "rows"}
         </span>
-        <span
-          role="button"
-          tabIndex={0}
-          onClick={(e) => {
-            e.stopPropagation();
-            handleOpenInfo();
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.stopPropagation();
-              handleOpenInfo();
-            }
-          }}
-          className={cn(
-            "inline-flex h-7 w-7 items-center justify-center rounded-md transition-colors hover:bg-muted",
-            day.sleep_time != null || day.sleep_quality != null
-              ? "text-primary"
-              : "text-muted-foreground",
-          )}
-        >
-          <Moon size={14} />
-        </span>
-        <span
-          role="button"
-          tabIndex={0}
-          onClick={(e) => {
-            e.stopPropagation();
-            setDeleteOpen(true);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.stopPropagation();
-              setDeleteOpen(true);
-            }
-          }}
-          className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:text-destructive hover:bg-muted transition-colors"
-        >
-          <Trash2 size={14} />
-        </span>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted transition-colors shrink-0"
+            >
+              <MoreVertical size={14} />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={handleStartRename}>
+              <Pencil size={14} className="mr-2" />
+              Rename
+            </DropdownMenuItem>
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger>
+                <ChevronRight size={14} className="mr-2" />
+                Weekday
+                {day.week_day_index !== null && day.week_day_index !== undefined && (
+                  <span className="ml-auto text-xs text-muted-foreground pl-2">
+                    {WEEKDAY_SHORT_LABELS[day.week_day_index]}
+                  </span>
+                )}
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent>
+                <DropdownMenuItem onClick={() => updateDay(day.id, { week_day_index: null })}>
+                  —
+                </DropdownMenuItem>
+                {Object.entries(WEEKDAY_SHORT_LABELS).map(([idx, label]) => (
+                  <DropdownMenuItem
+                    key={idx}
+                    onClick={() => updateDay(day.id, { week_day_index: parseInt(idx, 10) })}
+                    className={cn(
+                      day.week_day_index === parseInt(idx, 10) && "bg-accent",
+                    )}
+                  >
+                    {label}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+            <DropdownMenuItem onClick={handleOpenInfo}>
+              <Moon size={14} className={cn(
+                "mr-2",
+                (day.sleep_time != null || day.sleep_quality != null) && "text-primary",
+              )} />
+              Sleep Info
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={() => setDeleteOpen(true)}
+              className="text-destructive focus:text-destructive"
+            >
+              <Trash2 size={14} className="mr-2" />
+              Delete Day
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       {expanded && (

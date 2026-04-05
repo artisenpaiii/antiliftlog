@@ -1,6 +1,9 @@
 import { getRpePercentage, roundToIncrement } from "@/lib/rpe-chart";
-import { parseNumber, parseRpe, classifyLift, LIFT_MULTIPLIERS, BASE_DECAY } from "@/lib/stats/computations";
+import { parseNumber, parseRpe, LIFT_MULTIPLIERS, BASE_DECAY } from "@/lib/stats/computations";
+import { LiftParser } from "@/lib/stats/lift-parser";
 import type { Week, Day, DayColumn, DayRow, StatsSettings } from "@/lib/types/database";
+
+const liftParser = new LiftParser();
 
 export const FATIGUE_SCALE = 300;
 export const MAX_FATIGUE_REDUCTION = 0.10;
@@ -62,8 +65,9 @@ export function computeBlockResidualFatigue(
         for (const row of rows) {
           const exercise = row.cells[exerciseCol.id]?.trim();
           if (!exercise) continue;
-          const liftType = classifyLift(exercise);
-          if (!liftType) continue;
+          const classification = liftParser.classify(exercise);
+          if (!classification) continue;
+          const liftType = classification.mainLift;
           const reps = parseNumber(row.cells[repsCol.id]);
           const rpe = parseRpe(row.cells[rpeCol.id]);
           if (reps <= 0 || rpe <= 0) continue;
@@ -108,8 +112,9 @@ export function buildWeightPrediction(
   const exercise = cells[exerciseCol.id]?.trim();
   if (!exercise) return null;
 
-  const liftType = classifyLift(exercise);
-  if (!liftType) return null;
+  const classification = liftParser.classify(exercise);
+  if (!classification) return null;
+  const liftType = classification.mainLift;
 
   const oneRM = userPRs[liftType];
   if (!oneRM || oneRM <= 0) return null;
