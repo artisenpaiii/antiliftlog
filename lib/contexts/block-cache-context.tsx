@@ -54,6 +54,10 @@ interface BlockCacheContextValue {
     rowId: string,
     cells: Record<string, string>,
   ): Promise<boolean>;
+  bulkUpdateRowCells(
+    dayId: string,
+    updates: { rowId: string; cells: Record<string, string> }[],
+  ): Promise<boolean>;
   reorderRows(dayId: string, reordered: DayRow[], onError?: () => void): void;
 
   expandedDays: Set<string>;
@@ -131,6 +135,7 @@ export function BlockCacheProvider({
       addRow: (dayId: string, insert: DayRowInsert) => store.addRow(dayId, insert),
       deleteRow: (dayId: string, rowId: string) => store.deleteRow(dayId, rowId),
       updateRowCells: (dayId: string, rowId: string, cells: Record<string, string>) => store.updateRowCells(dayId, rowId, cells),
+      bulkUpdateRowCells: (dayId: string, updates: { rowId: string; cells: Record<string, string> }[]) => store.bulkUpdateRowCells(dayId, updates),
       reorderRows: (dayId: string, reordered: DayRow[], onError?: () => void) => store.reorderRows(dayId, reordered, onError),
       expandedDays,
       toggleDay,

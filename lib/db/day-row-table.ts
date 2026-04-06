@@ -42,4 +42,18 @@ export class DayRowTable extends BaseTable<
   ): Promise<DbResult<DayRow>> {
     return this.update(rowId, { cells });
   }
+
+  async bulkUpdateCells(
+    dayId: string,
+    rows: { id: string; cells: Record<string, string> }[],
+  ): Promise<DbResult<DayRow[]>> {
+    const { data, error } = await this.supabase
+      .from(this.tableName)
+      .upsert(
+        rows.map((r) => ({ id: r.id, day_id: dayId, cells: r.cells })),
+        { onConflict: "id" },
+      )
+      .select();
+    return { data: data as DayRow[] | null, error: this.toError(error) };
+  }
 }

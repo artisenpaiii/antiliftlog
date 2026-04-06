@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ClipboardCopy } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { createTables } from "@/lib/db";
+import { ImportEngine } from "@/lib/engines/import-engine";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -15,7 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { parseBlockImport } from "@/lib/import/parse";
-import type { Block, DayColumn, DayRow } from "@/lib/types/database";
+import type { Block } from "@/lib/types/database";
 
 const BLOCK_PROMPT = `Generate a training block JSON for LiftLog. Use exactly this schema:
 
@@ -101,64 +102,19 @@ export function ImportBlockDialog({
 
     setIsImporting(true);
 
-    const supabase = createClient();
-    const tables = createTables(supabase);
+    try {
+      const supabase = createClient();
+      const tables = createTables(supabase);
+      const engine = new ImportEngine(tables);
+      const result = await engine.importBlock(programId, nextBlockOrder, parsed);
 
-    const { data: newBlock, error: blockError } = await tables.blocks.create({
-      program_id: programId,
-      name: parsed.name,
-      order: nextBlockOrder,
-      start_date: parsed.start_date ?? null,
-    });
-
-    if (blockError || !newBlock) {
+      setIsImporting(false);
+      onBlockImported(result.block);
+      handleOpenChange(false);
+    } catch {
       setError("Failed to create block. Please try again.");
       setIsImporting(false);
-      return;
     }
-
-    for (let wi = 0; wi < parsed.weeks.length; wi++) {
-      const weekData = parsed.weeks[wi];
-      const { data: newWeek } = await tables.weeks.create({
-        block_id: newBlock.id,
-        week_number: wi + 1,
-      });
-      if (!newWeek) continue;
-
-      for (let di = 0; di < weekData.days.length; di++) {
-        const dayData = weekData.days[di];
-        const { data: newDay } = await tables.days.create({
-          week_id: newWeek.id,
-          day_number: di + 1,
-          name: dayData.name ?? null,
-          week_day_index: dayData.week_day_index ?? null,
-        });
-        if (!newDay) continue;
-
-        const columnInserts = dayData.columns.map((label, i) => ({
-          day_id: newDay.id,
-          label,
-          order: i,
-        }));
-        const { data: newCols } = await tables.dayColumns.createMany(columnInserts);
-        const cols: DayColumn[] = newCols ?? [];
-
-        if (dayData.rows.length > 0 && cols.length > 0) {
-          const rowInserts = dayData.rows.map((cells, i) => {
-            const cellMap: Record<string, string> = {};
-            for (let j = 0; j < cols.length; j++) {
-              cellMap[cols[j].id] = cells[j] ?? "";
-            }
-            return { day_id: newDay.id, order: i, cells: cellMap };
-          });
-          await tables.dayRows.createMany(rowInserts);
-        }
-      }
-    }
-
-    setIsImporting(false);
-    onBlockImported(newBlock);
-    handleOpenChange(false);
   }
 
   return (

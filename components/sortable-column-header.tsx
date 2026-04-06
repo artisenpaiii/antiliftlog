@@ -31,7 +31,7 @@ export function SortableColumnHeader({ id, label, onDelete, onClear }: SortableC
     <th
       ref={setNodeRef}
       style={style}
-      className="px-2 py-2 text-left text-xs font-medium text-muted-foreground bg-card whitespace-nowrap"
+      className="px-2 py-2 text-left text-xs font-medium text-muted-foreground bg-card whitespace-nowrap border border-border/40"
     >
       <div className="flex items-center gap-1 group/col">
         <button

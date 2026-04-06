@@ -62,6 +62,7 @@ export function DayCard({ day }: DayCardProps) {
     reorderColumns,
     reorderRows,
     updateRowCells,
+    bulkUpdateRowCells,
     expandedDays,
     toggleDay,
   } = useBlockCache();
@@ -217,7 +218,7 @@ export function DayCard({ day }: DayCardProps) {
     deleteRow(day.id, rowId);
   }
 
-  function handleCellSaved(rowId: string, cells: Record<string, string>) {
+  function handleSeparatorSaved(rowId: string, cells: Record<string, string>) {
     updateRowCells(day.id, rowId, cells);
   }
 
@@ -346,7 +347,17 @@ export function DayCard({ day }: DayCardProps) {
             onRowsReordered={(reordered) => reorderRows(day.id, reordered, () => setReorderError("Failed to save row order"))}
             onRowDeleted={handleRowDeleted}
             onColumnDeleted={handleColumnDeleted}
-            onCellSaved={handleCellSaved}
+            bulkSaveFn={(updates) => bulkUpdateRowCells(day.id, updates)}
+            onSeparatorSaved={handleSeparatorSaved}
+            onPasteRows={async (rowsCells) => {
+              for (const cells of rowsCells) {
+                await addRow(day.id, {
+                  day_id: day.id,
+                  order: rows.length,
+                  cells,
+                });
+              }
+            }}
           />
 
           {reorderError && (

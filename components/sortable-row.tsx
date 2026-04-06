@@ -2,16 +2,14 @@
 
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, Check } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { GripVertical } from "lucide-react";
 
 interface SortableRowProps {
   id: string;
   children: React.ReactNode;
-  saved?: boolean;
 }
 
-export function SortableRow({ id, children, saved }: SortableRowProps) {
+export function SortableRow({ id, children }: SortableRowProps) {
   const {
     attributes,
     listeners,
@@ -31,24 +29,17 @@ export function SortableRow({ id, children, saved }: SortableRowProps) {
     <tr
       ref={setNodeRef}
       style={style}
-      className={cn(
-        "group border-b border-border/50 transition-colors duration-300",
-        saved && "bg-emerald-500/10"
-      )}
+      className="group border-b border-border/50 transition-colors duration-300"
     >
       <td className="w-8 px-1 py-1.5">
-        {saved ? (
-          <Check size={12} className="mx-auto text-emerald-500" />
-        ) : (
-          <button
-            type="button"
-            className="cursor-grab touch-none text-muted-foreground/50 hover:text-muted-foreground"
-            {...attributes}
-            {...listeners}
-          >
-            <GripVertical size={12} />
-          </button>
-        )}
+        <button
+          type="button"
+          className="cursor-grab touch-none text-muted-foreground/50 hover:text-muted-foreground"
+          {...attributes}
+          {...listeners}
+        >
+          <GripVertical size={12} />
+        </button>
       </td>
       {children}
     </tr>

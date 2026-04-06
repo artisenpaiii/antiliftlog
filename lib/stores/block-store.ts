@@ -10,6 +10,7 @@ import type {
   DayRowInsert,
 } from "@/lib/types/database";
 import type { ImportDayData, ImportWeekData } from "@/lib/types/import";
+import { ImportEngine } from "@/lib/engines/import-engine";
 
 export interface BlockStoreSnapshot {
   loading: boolean;
@@ -319,125 +320,63 @@ export class BlockStore {
   }
 
   async importWeek(weekData: ImportWeekData): Promise<Week | null> {
-    const { data: newWeek, error: weekError } = await this.tables.weeks.create({
-      block_id: this.blockId,
-      week_number: this._weeks.length + 1,
-    });
+    const engine = new ImportEngine(this.tables);
+    try {
+      const result = await engine.importWeek(
+        this.blockId,
+        this._weeks.length + 1,
+        weekData,
+      );
 
-    if (weekError || !newWeek) {
-      console.error("Failed to import week:", weekError);
+      this._weeks = [...this._weeks, result.week];
+      const nextDays = new Map(this._daysByWeekId);
+      const nextCols = new Map(this._columnsByDayId);
+      const nextRows = new Map(this._rowsByDayId);
+
+      const days: Day[] = [];
+      for (const dr of result.days) {
+        days.push(dr.day);
+        nextCols.set(dr.day.id, dr.columns);
+        nextRows.set(dr.day.id, dr.rows);
+      }
+      nextDays.set(result.week.id, days);
+
+      this._daysByWeekId = nextDays;
+      this._columnsByDayId = nextCols;
+      this._rowsByDayId = nextRows;
+
+      this.notify();
+      return result.week;
+    } catch (e) {
+      console.error("Failed to import week:", e);
       return null;
     }
-
-    const newDayResults = await Promise.all(
-      weekData.days.map((dayData, di) =>
-        this.tables.days.create({
-          week_id: newWeek.id,
-          day_number: di + 1,
-          name: dayData.name ?? null,
-          week_day_index: dayData.week_day_index ?? null,
-        }),
-      ),
-    );
-
-    const newDays: Day[] = [];
-    const newColsByDayId = new Map<string, DayColumn[]>();
-    const newRowsByDayId = new Map<string, DayRow[]>();
-
-    await Promise.all(
-      newDayResults.map(async ({ data: newDay }, di) => {
-        if (!newDay) return;
-        newDays.push(newDay);
-
-        const dayData = weekData.days[di];
-        const columnInserts = dayData.columns.map((label, i) => ({
-          day_id: newDay.id,
-          label,
-          order: i,
-        }));
-        const { data: newCols } = await this.tables.dayColumns.createMany(columnInserts);
-        const cols = newCols ?? [];
-        newColsByDayId.set(newDay.id, cols);
-
-        if (dayData.rows.length > 0 && cols.length > 0) {
-          const rowInserts = dayData.rows.map((cells, i) => {
-            const cellMap: Record<string, string> = {};
-            for (let j = 0; j < cols.length; j++) {
-              cellMap[cols[j].id] = cells[j] ?? "";
-            }
-            return { day_id: newDay.id, order: i, cells: cellMap };
-          });
-          const { data: createdRows } = await this.tables.dayRows.createMany(rowInserts);
-          newRowsByDayId.set(newDay.id, createdRows ?? []);
-        } else {
-          newRowsByDayId.set(newDay.id, []);
-        }
-      }),
-    );
-
-    this._weeks = [...this._weeks, newWeek];
-    const nextDays = new Map(this._daysByWeekId);
-    nextDays.set(newWeek.id, newDays);
-    this._daysByWeekId = nextDays;
-
-    const nextCols = new Map(this._columnsByDayId);
-    for (const [dayId, cols] of newColsByDayId) nextCols.set(dayId, cols);
-    this._columnsByDayId = nextCols;
-
-    const nextRows = new Map(this._rowsByDayId);
-    for (const [dayId, rows] of newRowsByDayId) nextRows.set(dayId, rows);
-    this._rowsByDayId = nextRows;
-
-    this.notify();
-    return newWeek;
   }
 
   async importDay(weekId: string, dayData: ImportDayData): Promise<Day | null> {
     const existingDays = this._daysByWeekId.get(weekId) ?? [];
-    const { data: newDay, error: dayError } = await this.tables.days.create({
-      week_id: weekId,
-      day_number: existingDays.length + 1,
-      name: dayData.name ?? null,
-      week_day_index: dayData.week_day_index ?? null,
-    });
+    const engine = new ImportEngine(this.tables);
+    try {
+      const result = await engine.importDay(
+        weekId,
+        existingDays.length + 1,
+        dayData,
+      );
 
-    if (dayError || !newDay) {
-      console.error("Failed to import day:", dayError);
+      const nextDays = new Map(this._daysByWeekId);
+      const existing = nextDays.get(weekId) ?? [];
+      nextDays.set(weekId, [...existing, result.day]);
+      this._daysByWeekId = nextDays;
+
+      this._columnsByDayId = new Map(this._columnsByDayId).set(result.day.id, result.columns);
+      this._rowsByDayId = new Map(this._rowsByDayId).set(result.day.id, result.rows);
+
+      this.notify();
+      return result.day;
+    } catch (e) {
+      console.error("Failed to import day:", e);
       return null;
     }
-
-    const columnInserts = dayData.columns.map((label, i) => ({
-      day_id: newDay.id,
-      label,
-      order: i,
-    }));
-
-    const { data: newCols } = await this.tables.dayColumns.createMany(columnInserts);
-    const cols = newCols ?? [];
-
-    let newRows: DayRow[] = [];
-    if (dayData.rows.length > 0 && cols.length > 0) {
-      const rowInserts = dayData.rows.map((cells, i) => {
-        const cellMap: Record<string, string> = {};
-        for (let j = 0; j < cols.length; j++) {
-          cellMap[cols[j].id] = cells[j] ?? "";
-        }
-        return { day_id: newDay.id, order: i, cells: cellMap };
-      });
-      const { data: createdRows } = await this.tables.dayRows.createMany(rowInserts);
-      newRows = createdRows ?? [];
-    }
-
-    const nextDays = new Map(this._daysByWeekId);
-    const existing = nextDays.get(weekId) ?? [];
-    nextDays.set(weekId, [...existing, newDay]);
-    this._daysByWeekId = nextDays;
-
-    this._columnsByDayId = new Map(this._columnsByDayId).set(newDay.id, cols);
-    this._rowsByDayId = new Map(this._rowsByDayId).set(newDay.id, newRows);
-
-    this.notify();
-    return newDay;
   }
 
   // ==================== Day Mutations ====================
@@ -635,6 +574,37 @@ export class BlockStore {
     nextRows.set(
       dayId,
       existing.map((r) => (r.id === rowId ? { ...r, cells } : r)),
+    );
+    this._rowsByDayId = nextRows;
+
+    this.notify();
+    return true;
+  }
+
+  async bulkUpdateRowCells(
+    dayId: string,
+    updates: { rowId: string; cells: Record<string, string> }[],
+  ): Promise<boolean> {
+    const { error } = await this.tables.dayRows.bulkUpdateCells(
+      dayId,
+      updates.map((u) => ({ id: u.rowId, cells: u.cells })),
+    );
+
+    if (error) {
+      console.error("Bulk save failed:", error);
+      return false;
+    }
+
+    // Update local cache
+    const nextRows = new Map(this._rowsByDayId);
+    const existing = nextRows.get(dayId) ?? [];
+    const updateMap = new Map(updates.map((u) => [u.rowId, u.cells]));
+    nextRows.set(
+      dayId,
+      existing.map((r) => {
+        const newCells = updateMap.get(r.id);
+        return newCells ? { ...r, cells: newCells } : r;
+      }),
     );
     this._rowsByDayId = nextRows;
 

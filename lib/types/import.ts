@@ -1,8 +1,10 @@
+export type ImportRow = string[] | { separator: string };
+
 export interface ImportDayData {
   name?: string;
   week_day_index?: number | null;
   columns: string[];
-  rows: string[][];
+  rows: ImportRow[];
 }
 
 export interface ImportWeekData {

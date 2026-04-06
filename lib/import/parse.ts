@@ -1,4 +1,4 @@
-import type { ImportDayData, ImportWeekData, ImportBlockData } from "@/lib/types/import";
+import type { ImportDayData, ImportWeekData, ImportBlockData, ImportRow } from "@/lib/types/import";
 
 function isObject(val: unknown): val is Record<string, unknown> {
   return typeof val === "object" && val !== null && !Array.isArray(val);
@@ -16,7 +16,10 @@ export function parseDayImport(raw: unknown): ImportDayData {
   if (!Array.isArray(raw.rows)) throw new Error('"rows" must be an array');
   for (let i = 0; i < raw.rows.length; i++) {
     const row = raw.rows[i];
-    if (!Array.isArray(row)) throw new Error(`Row ${i + 1} must be an array`);
+    if (isObject(row) && typeof row.separator === "string" && row.separator.trim()) {
+      continue;
+    }
+    if (!Array.isArray(row)) throw new Error(`Row ${i + 1} must be an array or a separator object`);
     if (row.length !== raw.columns.length) {
       throw new Error(
         `Row ${i + 1} has ${row.length} value(s) but there are ${raw.columns.length} column(s)`,
@@ -45,7 +48,7 @@ export function parseDayImport(raw: unknown): ImportDayData {
     name,
     week_day_index,
     columns: raw.columns as string[],
-    rows: raw.rows as string[][],
+    rows: raw.rows as ImportRow[],
   };
 }
 

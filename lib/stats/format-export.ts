@@ -72,14 +72,17 @@ export function formatProgramExport(
         const sortedColumns = [...dayData.columns].sort((a, b) => a.order - b.order);
         const sortedRows = [...dayData.rows].sort((a, b) => a.order - b.order);
 
-        const exercises = sortedRows.map((row) => {
-          const entry: Record<string, string> = {};
-          for (const col of sortedColumns) {
-            const val = row.cells[col.id];
-            if (val) entry[col.label] = val;
-          }
-          return entry;
-        }).filter((e) => Object.keys(e).length > 0);
+        const exercises = sortedRows
+          .filter((row) => !("__separator_label" in (row.cells ?? {})))
+          .map((row) => {
+            const entry: Record<string, string> = {};
+            for (const col of sortedColumns) {
+              const val = row.cells[col.id];
+              if (val) entry[col.label] = val;
+            }
+            return entry;
+          })
+          .filter((e) => Object.keys(e).length > 0);
 
         return {
           day_number: dayData.day.day_number,
