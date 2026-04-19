@@ -24,7 +24,11 @@ const WEEK_PROMPT = `Generate a training week JSON for LiftLog. Use exactly this
       "name": "string (optional)",
       "week_day_index": 0-6 or null (0=Mon, 6=Sun),
       "columns": ["Exercise", "Sets", "Reps", "Weight", "RPE"],
-      "rows": [["exercise name", "sets", "reps", "weight", "rpe"], ...]
+      "rows": [
+        ["exercise name", "sets", "reps", "weight", "rpe"],
+        { "separator": "Section Label" },
+        ["exercise name", "sets", "reps", "weight", "rpe"]
+      ]
     }
   ]
 }
@@ -32,8 +36,10 @@ const WEEK_PROMPT = `Generate a training week JSON for LiftLog. Use exactly this
 Rules:
 - days is an array of day objects
 - columns is an array of column header strings
-- rows is an array of arrays; each inner array matches the columns order
-- all values are strings
+- rows is an array where each item is either:
+  - a string array matching the columns order (a regular exercise row)
+  - an object { "separator": "label" } to insert a labeled section divider
+- all cell values are strings
 - Output only valid JSON, no explanation`;
 
 interface ImportWeekDialogProps {
