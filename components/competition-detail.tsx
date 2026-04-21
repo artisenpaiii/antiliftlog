@@ -111,6 +111,9 @@ export function CompetitionDetail({
   const [isSaving, setIsSaving] = useState(false);
   const [sex, setSex] = useState<Sex>("male");
   const [equipment, setEquipment] = useState<Equipment>("raw");
+  const [pbToggles, setPbToggles] = useState<Record<"squat" | "bench" | "deadlift", boolean>>({
+    squat: false, bench: false, deadlift: false,
+  });
   const [saveMessage, setSaveMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const successTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -123,31 +126,24 @@ export function CompetitionDetail({
 
   const isDirty = !draftsEqual(draft, originalDraft);
 
-  const computedTotal = useMemo(() => {
-    let total = 0;
-    let hasAny = false;
-
+  const bestAttempts = useMemo(() => {
+    const result: Record<"squat" | "bench" | "deadlift", number | null> = { squat: null, bench: null, deadlift: null };
     for (const lift of LIFTS) {
-      let bestForLift: number | null = null;
       for (const attempt of ATTEMPTS) {
-        const kgKey = `${lift}_${attempt}_kg` as keyof Draft;
-        const goodKey = `${lift}_${attempt}_good` as keyof Draft;
-        const kg = parseFloatOrNull(draft[kgKey] as string);
-        const good = draft[goodKey] as boolean | null;
+        const kg = parseFloatOrNull(draft[`${lift}_${attempt}_kg` as keyof Draft] as string);
+        const good = draft[`${lift}_${attempt}_good` as keyof Draft] as boolean | null;
         if (kg !== null && good === true) {
-          if (bestForLift === null || kg > bestForLift) {
-            bestForLift = kg;
-          }
+          if (result[lift] === null || kg > result[lift]!) result[lift] = kg;
         }
       }
-      if (bestForLift !== null) {
-        total += bestForLift;
-        hasAny = true;
-      }
     }
-
-    return hasAny ? total : null;
+    return result;
   }, [draft]);
+
+  const computedTotal = useMemo(() => {
+    const vals = LIFTS.map((l) => bestAttempts[l]).filter((v): v is number => v !== null);
+    return vals.length > 0 ? vals.reduce((a, b) => a + b, 0) : null;
+  }, [bestAttempts]);
 
   function handleFieldChange(field: keyof Draft, value: string | boolean | null) {
     setDraft((prev) => ({ ...prev, [field]: value }));
@@ -197,6 +193,24 @@ export function CompetitionDetail({
     if (error || !data) {
       setSaveMessage({ type: "error", text: error ?? "Failed to save" });
       return;
+    }
+
+    // Upsert PB entries for toggled lifts
+    const toggledLifts = LIFTS.filter((l) => pbToggles[l] && bestAttempts[l] !== null);
+    if (toggledLifts.length > 0) {
+      await Promise.all(
+        toggledLifts.map((lift) =>
+          tables.personalBests.upsertCompetitionPb({
+            created_by: data.created_by,
+            lift,
+            kg: bestAttempts[lift]!,
+            source: "competition",
+            recorded_at: data.meet_date,
+            competition_id: data.id,
+          }),
+        ),
+      );
+      setPbToggles({ squat: false, bench: false, deadlift: false });
     }
 
     setOriginalDraft(buildDraft(data));
@@ -306,6 +320,36 @@ export function CompetitionDetail({
           <h3 className="text-sm font-medium">Attempts</h3>
           <AttemptsTable draft={attemptDraft} onDraftChange={handleAttemptChange} />
         </div>
+
+        {LIFTS.some((l) => bestAttempts[l] !== null) && (
+          <div className="space-y-2">
+            <p className="text-sm font-medium">Save as personal best</p>
+            <div className="flex flex-wrap gap-2">
+              {LIFTS.map((lift) => {
+                const best = bestAttempts[lift];
+                if (best === null) return null;
+                const on = pbToggles[lift];
+                return (
+                  <button
+                    key={lift}
+                    type="button"
+                    onClick={() => setPbToggles((prev) => ({ ...prev, [lift]: !prev[lift] }))}
+                    className={cn(
+                      "flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm transition-colors",
+                      on
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-border text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {on && <Check size={12} />}
+                    <span className="capitalize">{lift}</span>
+                    <span className="text-xs opacity-70">{best} kg</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {computedTotal !== null && (() => {
           const bw = parseFloatOrNull(draft.bodyweight_kg);

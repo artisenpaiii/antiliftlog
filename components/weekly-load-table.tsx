@@ -2,7 +2,7 @@
 
 import { Fragment } from "react";
 import { cn } from "@/lib/utils";
-import type { WeeklyLoadRow } from "@/lib/stats/computations";
+import type { WeeklyLoadRow } from "@/lib/stats/types";
 
 interface WeeklyLoadTableProps {
   rows: WeeklyLoadRow[];

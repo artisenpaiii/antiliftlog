@@ -40,6 +40,7 @@ async function ProfileContent() {
       competitionCount={competitionCount}
       initialMetadata={initialMetadata}
       email={user.email ?? ""}
+      userId={user.id}
     />
   );
 }

@@ -7,6 +7,7 @@ import { DayColumnTable } from "./day-column-table";
 import { DayRowTable } from "./day-row-table";
 import { CompetitionTable } from "./competition-table";
 import { StatsSettingsTable } from "./stats-settings-table";
+import { PersonalBestTable } from "./personal-best-table";
 
 export {
   ProgramTable,
@@ -17,6 +18,7 @@ export {
   DayRowTable,
   CompetitionTable,
   StatsSettingsTable,
+  PersonalBestTable,
 };
 
 export interface Tables {
@@ -28,6 +30,7 @@ export interface Tables {
   dayRows: DayRowTable;
   competitions: CompetitionTable;
   statsSettings: StatsSettingsTable;
+  personalBests: PersonalBestTable;
 }
 
 export function createTables(supabase: SupabaseClient): Tables {
@@ -40,5 +43,6 @@ export function createTables(supabase: SupabaseClient): Tables {
     dayRows: new DayRowTable(supabase),
     competitions: new CompetitionTable(supabase),
     statsSettings: new StatsSettingsTable(supabase),
+    personalBests: new PersonalBestTable(supabase),
   };
 }

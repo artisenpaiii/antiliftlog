@@ -1,7 +1,7 @@
 "use client";
 
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend } from "recharts";
-import type { IntensityZonePoint } from "@/lib/stats/computations";
+import type { IntensityZonePoint } from "@/lib/stats/types";
 
 const ZONE_COLORS = {
   zone1: "hsl(140, 60%, 45%)",  // green — < 70%

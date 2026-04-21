@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
-import type { UserMetadata } from "@/lib/types/database";
+import { createTables } from "@/lib/db";
+import type { UserMetadata, PersonalBestLift } from "@/lib/types/database";
 
 function parseFloatOrNull(value: string): number | null {
   if (!value.trim()) return null;
@@ -23,6 +24,7 @@ interface ProfilePageProps {
   competitionCount: number;
   initialMetadata: UserMetadata;
   email: string;
+  userId: string;
 }
 
 const PB_FIELDS = [
@@ -62,6 +64,7 @@ export function ProfilePage({
   competitionCount,
   initialMetadata,
   email,
+  userId,
 }: ProfilePageProps) {
   const [draft, setDraft] = useState<Draft>(() => buildDraft(initialMetadata));
   const [originalDraft] = useState<Draft>(() => buildDraft(initialMetadata));
@@ -91,13 +94,36 @@ export function ProfilePage({
     const supabase = createClient();
     const { error } = await supabase.auth.updateUser({ data: metadata });
 
-    setIsSaving(false);
-
     if (error) {
+      setIsSaving(false);
       setSaveMessage({ type: "error", text: error.message });
       return;
     }
 
+    // Insert a PB history entry for each gym lift value that changed or was newly set
+    const today = new Date().toISOString().slice(0, 10);
+    const gymLifts: Array<{ lift: PersonalBestLift; draftKey: keyof Draft }> = [
+      { lift: "squat", draftKey: "pb_squat_gym" },
+      { lift: "bench", draftKey: "pb_bench_gym" },
+      { lift: "deadlift", draftKey: "pb_deadlift_gym" },
+    ];
+    const tables = createTables(supabase);
+    for (const { lift, draftKey } of gymLifts) {
+      const newKg = parseFloatOrNull(draft[draftKey]);
+      const oldKg = parseFloatOrNull(originalDraft[draftKey]);
+      if (newKg !== null && newKg !== oldKg) {
+        await tables.personalBests.insertGymPb({
+          created_by: userId,
+          lift,
+          kg: newKg,
+          source: "gym",
+          recorded_at: today,
+          competition_id: null,
+        });
+      }
+    }
+
+    setIsSaving(false);
     setSaveMessage({ type: "success", text: "Saved" });
 
     setTimeout(() => {

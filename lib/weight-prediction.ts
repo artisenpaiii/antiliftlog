@@ -1,5 +1,5 @@
 import { getRpePercentage, roundToIncrement } from "@/lib/rpe-chart";
-import { parseNumber, parseRpe, LIFT_MULTIPLIERS, BASE_DECAY } from "@/lib/stats/computations";
+import { parseNumber, parseRpe, LIFT_MULTIPLIERS, BASE_DECAY } from "@/lib/stats/stats-helpers";
 import { LiftParser } from "@/lib/stats/lift-parser";
 import type { Week, Day, DayColumn, DayRow, StatsSettings } from "@/lib/types/database";
 

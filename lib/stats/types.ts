@@ -55,3 +55,27 @@ export interface ParsedLiftRecord {
   sleepQuality: number | null;
   sleepTime: number | null;
 }
+
+export interface IntensityZonePoint {
+  label: string;
+  zone1: number; // < 70% 1RM — technique / GPP
+  zone2: number; // 70–80% — volume / hypertrophy
+  zone3: number; // 80–90% — primary strength
+  zone4: number; // > 90% — neural / peaking
+}
+
+export interface WeeklyLiftSummary {
+  sets: number;
+  totalReps: number;
+  avgRpe: number | null;
+  peakWeight: number | null;
+  volume: number; // sets × reps × weight
+  avgIntensityPct: number | null;
+}
+
+export interface WeeklyLoadRow {
+  label: string;
+  squat: WeeklyLiftSummary;
+  bench: WeeklyLiftSummary;
+  deadlift: WeeklyLiftSummary;
+}

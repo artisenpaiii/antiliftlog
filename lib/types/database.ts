@@ -155,6 +155,22 @@ export type StatsSettingsInsert = Omit<StatsSettings, "id" | "created_at" | "upd
 
 export type StatsSettingsUpdate = Partial<Omit<StatsSettings, "id" | "created_by" | "created_at" | "updated_at">>;
 
+export type PersonalBestLift = "squat" | "bench" | "deadlift";
+export type PersonalBestSource = "gym" | "competition";
+
+export interface PersonalBest {
+  id: string;
+  created_by: string;
+  lift: PersonalBestLift;
+  kg: number;
+  source: PersonalBestSource;
+  recorded_at: string;
+  competition_id: string | null;
+  created_at: string;
+}
+
+export type PersonalBestInsert = Omit<PersonalBest, "id" | "created_at">;
+
 export interface UserMetadata {
   display_name: string;
   pb_squat_gym: number | null;

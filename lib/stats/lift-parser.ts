@@ -7,7 +7,7 @@ import type {
   LiftClassification,
   ParsedLiftRecord,
 } from "./types";
-import { parseNumber, parseRpe } from "./computations";
+import { parseNumber, parseRpe } from "./stats-helpers";
 
 interface VariantEntry {
   pattern: RegExp;
@@ -117,7 +117,23 @@ const MAIN_LIFT_PATTERNS: MainLiftEntry[] = [
 ];
 
 function normalize(name: string): string {
-  return name.toLowerCase().replace(/\s+/g, "");
+  // Strip non-alphanumeric (except spaces), lowercase, remove spaces
+  return name.replace(/[^a-zA-Z0-9 ]/g, "").toLowerCase().replace(/\s+/g, "");
+}
+
+/** Returns a stable key for an exercise based on its tags, e.g. "bp" or "bp_cg_paused" */
+export function getExerciseKey(classification: LiftClassification): string {
+  if (classification.variantTags.length === 0) return classification.mainTag;
+  const sortedVariants = [...classification.variantTags].sort();
+  return `${classification.mainTag}_${sortedVariants.join("_")}`;
+}
+
+/** Returns a human-readable display label for an exercise, e.g. "Bench" or "Close Grip Paused Bench" */
+export function getExerciseLabel(classification: LiftClassification): string {
+  const mainLabel = TAG_LABELS[classification.mainTag] ?? classification.mainTag;
+  if (classification.variantTags.length === 0) return mainLabel;
+  const variantLabels = [...classification.variantTags].sort().map((t) => TAG_LABELS[t] ?? t);
+  return `${variantLabels.join(" ")} ${mainLabel}`;
 }
 
 function findColumn(

@@ -1,7 +1,8 @@
 import type { Program, StatsSettings } from "@/lib/types/database";
 import { WEEKDAY_LABELS } from "@/lib/types/database";
 import type { ProgramHierarchy, LiftType } from "./types";
-import { computeVolumeData, computeFatigueData } from "./computations";
+import { WeekVolumeChart } from "./charts/volume-chart-class";
+import { FatigueChartClass } from "./charts/fatigue-chart-class";
 import { LiftParser } from "./lift-parser";
 
 interface ExportDay {
@@ -114,7 +115,7 @@ export function formatProgramExport(
   // Volume
   let volumeSummary: ExportVolumeWeek[] | null = null;
   if (settings && records.length > 0) {
-    const { dataPoints, exercises } = computeVolumeData(records, hierarchy);
+    const { dataPoints, exercises } = new WeekVolumeChart(records, hierarchy).computeData();
     if (exercises.length > 0) {
       volumeSummary = dataPoints.map((dp) => {
         const exVols: Record<string, number> = {};
@@ -130,7 +131,7 @@ export function formatProgramExport(
   // Fatigue
   let fatigueSummary: ExportFatigueDay[] | null = null;
   if (settings?.rpe_label && records.length > 0) {
-    const { dataPoints: fatiguePoints, liftTypes } = computeFatigueData(records, hierarchy, false);
+    const { dataPoints: fatiguePoints, liftTypes } = new FatigueChartClass(records, hierarchy, false).computeData();
     if (fatiguePoints.length > 0) {
       fatigueSummary = fatiguePoints.map((dp) => {
         const scores: Record<string, number> = {};

@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { Dumbbell, Trophy, BarChart3, Wrench, User } from "lucide-react";
+import { Dumbbell, Trophy, BarChart3, BrainCircuit, Wrench, User } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -9,6 +9,7 @@ const links = [
   { href: "/dashboard/programs", label: "Programs", icon: Dumbbell },
   { href: "/dashboard/competitions", label: "Competitions", icon: Trophy },
   { href: "/dashboard/stats", label: "Stats", icon: BarChart3 },
+  { href: "/dashboard/coach", label: "Coach", icon: BrainCircuit },
   { href: "/dashboard/tools", label: "Tools", icon: Wrench },
   { href: "/dashboard/profile", label: "Profile", icon: User },
 ];
