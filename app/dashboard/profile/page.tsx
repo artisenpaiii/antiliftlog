@@ -15,10 +15,13 @@ async function ProfileContent() {
 
   const tables = createTables(supabase);
 
-  const [programsResult, competitionsResult] = await Promise.all([
-    tables.programs.findByUserId(user.id),
-    tables.competitions.findByUserId(user.id),
-  ]);
+  const [programsResult, competitionsResult, athletesResult, coachRelsResult] =
+    await Promise.all([
+      tables.programs.findByUserId(user.id),
+      tables.competitions.findByUserId(user.id),
+      tables.coachAthletes.findAthletes(user.id),
+      tables.coachAthletes.findCoachRelationships(user.id),
+    ]);
 
   const programCount = programsResult.data?.length ?? 0;
   const competitionCount = competitionsResult.data?.length ?? 0;
@@ -40,6 +43,9 @@ async function ProfileContent() {
       competitionCount={competitionCount}
       initialMetadata={initialMetadata}
       email={user.email ?? ""}
+      userId={user.id}
+      initialAthletes={athletesResult.data ?? []}
+      initialCoachRelationships={coachRelsResult.data ?? []}
     />
   );
 }

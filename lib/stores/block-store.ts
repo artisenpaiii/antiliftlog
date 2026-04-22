@@ -1,3 +1,4 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Tables } from "@/lib/db";
 import type {
   Week,
@@ -587,6 +588,7 @@ export class BlockStore {
   ): Promise<boolean> {
     const { error } = await this.tables.dayRows.bulkUpdateCells(
       dayId,
+      this.blockId,
       updates.map((u) => ({ id: u.rowId, cells: u.cells })),
     );
 
@@ -625,5 +627,168 @@ export class BlockStore {
       console.error("Failed to persist row order:", err);
       onError?.();
     });
+  }
+
+  // ==================== Realtime ====================
+
+  startRealtime(supabase: SupabaseClient): () => void {
+    const blockFilter = `block_id=eq.${this.blockId}`;
+
+    // day_rows and day_columns subscribe without a server-side filter because the
+    // bulk-upsert payload omits block_id, so a block_id= filter would never match.
+    // days has no block_id column at all, so it also filters client-side.
+    // All three discard non-matching events in their handlers.
+    const channel = supabase
+      .channel(`block-rt-${this.blockId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "weeks", filter: blockFilter },
+        () => { this.load(); },
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "days" },
+        (payload) => { this._handleDayChange(payload); },
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "day_rows" },
+        (payload) => {
+          const row = (payload.eventType === "DELETE" ? payload.old : payload.new) as { block_id?: string };
+          if (row.block_id !== this.blockId) return;
+          this._handleRowChange(payload);
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "day_columns" },
+        (payload) => {
+          const col = (payload.eventType === "DELETE" ? payload.old : payload.new) as { block_id?: string };
+          if (col.block_id !== this.blockId) return;
+          this._handleColumnChange(payload);
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }
+
+  private _handleDayChange(payload: { eventType: string; new: Record<string, unknown>; old: Record<string, unknown> }): void {
+    const { eventType, new: newRecord, old: oldRecord } = payload;
+
+    if (eventType === "INSERT") {
+      const day = newRecord as unknown as Day;
+      const existing = this._daysByWeekId.get(day.week_id);
+      if (existing === undefined) return; // week doesn't belong to this block
+      if (existing.some((d) => d.id === day.id)) return;
+      const sorted = [...existing, day].sort((a, b) => a.day_number - b.day_number);
+      this._daysByWeekId = new Map(this._daysByWeekId).set(day.week_id, sorted);
+      this._columnsByDayId = new Map(this._columnsByDayId).set(day.id, []);
+      this._rowsByDayId = new Map(this._rowsByDayId).set(day.id, []);
+      this.notify();
+    } else if (eventType === "UPDATE") {
+      const day = newRecord as unknown as Day;
+      const existing = this._daysByWeekId.get(day.week_id);
+      if (existing === undefined) return;
+      this._daysByWeekId = new Map(this._daysByWeekId).set(
+        day.week_id,
+        existing.map((d) => (d.id === day.id ? day : d)),
+      );
+      this.notify();
+    } else if (eventType === "DELETE") {
+      const dayId = (oldRecord as { id: string }).id;
+      for (const [weekId, days] of this._daysByWeekId) {
+        if (days.some((d) => d.id === dayId)) {
+          this._daysByWeekId = new Map(this._daysByWeekId).set(
+            weekId,
+            days.filter((d) => d.id !== dayId),
+          );
+          const nextCols = new Map(this._columnsByDayId);
+          const nextRows = new Map(this._rowsByDayId);
+          nextCols.delete(dayId);
+          nextRows.delete(dayId);
+          this._columnsByDayId = nextCols;
+          this._rowsByDayId = nextRows;
+          this.notify();
+          break;
+        }
+      }
+    }
+  }
+
+  private _handleRowChange(payload: { eventType: string; new: Record<string, unknown>; old: Record<string, unknown> }): void {
+    const { eventType, new: newRecord, old: oldRecord } = payload;
+
+    if (eventType === "INSERT") {
+      const row = newRecord as unknown as DayRow;
+      const dayId = row.day_id;
+      const existing = this._rowsByDayId.get(dayId) ?? [];
+      if (existing.some((r) => r.id === row.id)) return;
+      const sorted = [...existing, row].sort((a, b) => a.order - b.order);
+      this._rowsByDayId = new Map(this._rowsByDayId).set(dayId, sorted);
+      this.notify();
+    } else if (eventType === "UPDATE") {
+      const row = newRecord as unknown as DayRow;
+      const dayId = row.day_id;
+      const existing = this._rowsByDayId.get(dayId) ?? [];
+      const localRow = existing.find((r) => r.id === row.id);
+      if (localRow && new Date(row.updated_at) < new Date(localRow.updated_at)) return;
+      this._rowsByDayId = new Map(this._rowsByDayId).set(
+        dayId,
+        existing.map((r) => (r.id === row.id ? row : r)),
+      );
+      this.notify();
+    } else if (eventType === "DELETE") {
+      const rowId = (oldRecord as { id: string }).id;
+      for (const [dayId, rows] of this._rowsByDayId) {
+        if (rows.some((r) => r.id === rowId)) {
+          this._rowsByDayId = new Map(this._rowsByDayId).set(
+            dayId,
+            rows.filter((r) => r.id !== rowId),
+          );
+          this.notify();
+          break;
+        }
+      }
+    }
+  }
+
+  private _handleColumnChange(payload: { eventType: string; new: Record<string, unknown>; old: Record<string, unknown> }): void {
+    const { eventType, new: newRecord, old: oldRecord } = payload;
+
+    if (eventType === "INSERT") {
+      const col = newRecord as unknown as DayColumn;
+      const dayId = col.day_id;
+      const existing = this._columnsByDayId.get(dayId) ?? [];
+      if (existing.some((c) => c.id === col.id)) return;
+      const sorted = [...existing, col].sort((a, b) => a.order - b.order);
+      this._columnsByDayId = new Map(this._columnsByDayId).set(dayId, sorted);
+      this.notify();
+    } else if (eventType === "UPDATE") {
+      const col = newRecord as unknown as DayColumn;
+      const dayId = col.day_id;
+      const existing = this._columnsByDayId.get(dayId) ?? [];
+      const localCol = existing.find((c) => c.id === col.id);
+      if (localCol && new Date(col.updated_at) < new Date(localCol.updated_at)) return;
+      this._columnsByDayId = new Map(this._columnsByDayId).set(
+        dayId,
+        existing.map((c) => (c.id === col.id ? col : c)),
+      );
+      this.notify();
+    } else if (eventType === "DELETE") {
+      const colId = (oldRecord as { id: string }).id;
+      for (const [dayId, cols] of this._columnsByDayId) {
+        if (cols.some((c) => c.id === colId)) {
+          this._columnsByDayId = new Map(this._columnsByDayId).set(
+            dayId,
+            cols.filter((c) => c.id !== colId),
+          );
+          this.notify();
+          break;
+        }
+      }
+    }
   }
 }

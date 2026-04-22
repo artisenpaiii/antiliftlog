@@ -15,9 +15,10 @@ import type { Program, Block } from "@/lib/types/database";
 interface ProgramDetailProps {
   program: Program;
   initialBlocks: Block[];
+  hasCoach?: boolean;
 }
 
-export function ProgramDetail({ program, initialBlocks }: ProgramDetailProps) {
+export function ProgramDetail({ program, initialBlocks, hasCoach = false }: ProgramDetailProps) {
   const [programName, setProgramName] = useState(program.name);
   const [blocks, setBlocks] = useState<Block[]>(initialBlocks);
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
@@ -92,6 +93,7 @@ export function ProgramDetail({ program, initialBlocks }: ProgramDetailProps) {
             <BlockDetail
               block={selectedBlock}
               onBack={() => setSelectedBlockId(null)}
+              enableRealtime={hasCoach}
             />
           ) : (
             <div className="flex h-full items-center justify-center">

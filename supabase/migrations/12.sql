@@ -1,0 +1,1 @@
+ALTER TABLE public.stats_settings ADD COLUMN planned_rpe_label varchar;  

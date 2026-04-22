@@ -1,0 +1,1 @@
+ALTER TABLE stats_settings ADD COLUMN variation_label text DEFAULT NULL; 

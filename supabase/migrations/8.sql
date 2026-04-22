@@ -1,0 +1,1 @@
+ ALTER TABLE public.stats_settings ADD COLUMN rpe_label varchar;
