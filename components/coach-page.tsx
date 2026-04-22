@@ -51,7 +51,6 @@ export function CoachPage({ initialPrograms, initialCompetitions, initialPersona
     }
   }
 
-  const hasSettings = analysis && analysis.totalSegments > 0 || analysis?.totalSegments === 0 && !loading;
   const noSettings = analysis && analysis.totalSegments === 0 && !analysis.hasCompetitions && analysis.exerciseImpact.overall.length === 0;
 
   return (
@@ -87,7 +86,7 @@ export function CoachPage({ initialPrograms, initialCompetitions, initialPersona
         <div className="space-y-6">
           {noSettings && (
             <p className="text-sm text-muted-foreground rounded-lg border border-border p-4">
-              Configure column mapping in Stats first so Arti can read your training data.
+              No training timeline found. Make sure your blocks have a start date set, then configure column mapping in Stats.
             </p>
           )}
 

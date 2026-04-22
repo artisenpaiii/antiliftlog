@@ -114,7 +114,7 @@ export function extractPatterns(
     });
   }
 
-  // 7. Volume taper pattern
+  // 6. Volume taper pattern
   if (volumeAnalysis.hasTaper && volumeAnalysis.supportingSegments >= 2) {
     const peakWeek = volumeAnalysis.peakWeekIndex !== null ? volumeAnalysis.peakWeekIndex + 1 : null;
     const positiveWithComp = aggregations

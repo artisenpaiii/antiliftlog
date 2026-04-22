@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo, startTransition } from "react";
 import type { ReactNode } from "react";
 import { ArrowLeft, Settings, Check, Loader2, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -42,8 +42,12 @@ function ChartSlot({ chart, title }: { chart: StatsChart | null; title: string }
   useEffect(() => {
     if (!chart) return;
     setNode(PENDING);
-    const id = setTimeout(() => setNode(chart.analyse()), 0);
-    return () => clearTimeout(id);
+    let cancelled = false;
+    startTransition(() => {
+      const result = chart.analyse();
+      if (!cancelled) setNode(result);
+    });
+    return () => { cancelled = true; };
   }, [chart]);
 
   if (!chart) return null;

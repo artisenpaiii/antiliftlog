@@ -94,8 +94,11 @@ function detectDeload(weeksBeforeComp: ParsedLiftRecord[][]): number | null {
   return null;
 }
 
-function withinBlockOutcome(weeksBeforeComp: ParsedLiftRecord[][]): SegmentOutcome {
-  if (weeksBeforeComp.length < 2) return "neutral";
+function withinBlockOutcome(weeksBeforeComp: ParsedLiftRecord[][]): {
+  outcome: SegmentOutcome;
+  peakImprovement: number | null;
+} {
+  if (weeksBeforeComp.length < 2) return { outcome: "neutral", peakImprovement: null };
 
   const lastTwoRecords = [...(weeksBeforeComp[0] ?? []), ...(weeksBeforeComp[1] ?? [])];
   const n = weeksBeforeComp.length;
@@ -108,11 +111,12 @@ function withinBlockOutcome(weeksBeforeComp: ParsedLiftRecord[][]): SegmentOutco
 
   const peakLast = peakOf(lastTwoRecords);
   const peakFirst = peakOf(firstTwoRecords);
+  const peakImprovement = peakFirst > 0 ? peakLast - peakFirst : null;
 
-  if (peakFirst === 0) return "neutral";
-  if (peakLast > peakFirst * 1.01) return "positive";
-  if (peakLast < peakFirst * 0.99) return "negative";
-  return "neutral";
+  if (peakFirst === 0) return { outcome: "neutral", peakImprovement: null };
+  if (peakLast > peakFirst * 1.01) return { outcome: "positive", peakImprovement };
+  if (peakLast < peakFirst * 0.99) return { outcome: "negative", peakImprovement };
+  return { outcome: "neutral", peakImprovement };
 }
 
 const LIFT_KEYS: PersonalBestLift[] = ["squat", "bench", "deadlift"];
@@ -172,22 +176,13 @@ export function aggregateSegment(seg: Segment, prevCompResults: CompResults | nu
     const pbSignals = computePbSignals(seg.competition, compResults, personalBests);
     pbLiftsAtComp = pbSignals.pbLiftsAtComp;
     pbLiftsBeatHistory = pbSignals.pbLiftsBeatHistory;
-    const pbCount = Math.max(
-      new Set([...pbLiftsAtComp, ...pbLiftsBeatHistory]).size,
-      pbLiftsAtComp.length,
-    );
+    const pbCount = new Set([...pbLiftsAtComp, ...pbLiftsBeatHistory]).size;
 
     if (!prevCompResults) {
       // First segment — use within-block fallback, then refine with PBs
-      outcome = withinBlockOutcome(seg.weeksBeforeComp);
-      const lastTwoRecords = [...(seg.weeksBeforeComp[0] ?? []), ...(seg.weeksBeforeComp[1] ?? [])];
-      const n = seg.weeksBeforeComp.length;
-      const firstTwoRecords = [...(seg.weeksBeforeComp[n - 1] ?? []), ...(seg.weeksBeforeComp[n - 2] ?? [])];
-      const peakOf = (recs: ParsedLiftRecord[]) => {
-        const weights = recs.map((r) => r.weight).filter((w) => w > 0);
-        return weights.length > 0 ? Math.max(...weights) : 0;
-      };
-      peakWeightImprovement = peakOf(lastTwoRecords) - peakOf(firstTwoRecords);
+      const fallback = withinBlockOutcome(seg.weeksBeforeComp);
+      outcome = fallback.outcome;
+      peakWeightImprovement = fallback.peakImprovement;
 
       // PB data is a stronger signal than within-block weight comparison
       if (pbCount >= 2) outcome = "positive";
