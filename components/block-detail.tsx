@@ -16,6 +16,7 @@ import type { Block, Week } from "@/lib/types/database";
 interface BlockDetailProps {
   block: Block;
   onBack?: () => void;
+  enableRealtime?: boolean;
 }
 
 function FatigueToggleButton() {
@@ -34,9 +35,9 @@ function FatigueToggleButton() {
   );
 }
 
-export function BlockDetail({ block, onBack }: BlockDetailProps) {
+export function BlockDetail({ block, onBack, enableRealtime }: BlockDetailProps) {
   return (
-    <BlockCacheProvider blockId={block.id}>
+    <BlockCacheProvider blockId={block.id} enableRealtime={enableRealtime}>
       <BlockDetailInner block={block} onBack={onBack} />
     </BlockCacheProvider>
   );

@@ -19,15 +19,25 @@ async function ProgramDetailContent({
   }
 
   const tables = createTables(supabase);
-  const { data: program } = await tables.programs.findById(id);
+  const [programResult, coachResult] = await Promise.all([
+    tables.programs.findById(id),
+    tables.coachAthletes.findCoachRelationships(data.claims.sub),
+  ]);
 
-  if (!program) {
+  if (!programResult.data) {
     redirect("/dashboard/programs");
   }
 
   const { data: blocks } = await tables.blocks.findByProgramId(id);
+  const hasCoach = (coachResult.data ?? []).some((r) => r.relationship.status === "accepted");
 
-  return <ProgramDetail program={program} initialBlocks={blocks ?? []} />;
+  return (
+    <ProgramDetail
+      program={programResult.data}
+      initialBlocks={blocks ?? []}
+      hasCoach={hasCoach}
+    />
+  );
 }
 
 function Loading() {

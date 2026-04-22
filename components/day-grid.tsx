@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback, useEffect, useContext } from "react";
+import { useState, useMemo, useCallback, useEffect, useContext, useRef } from "react";
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, horizontalListSortingStrategy, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
 import { X, Pencil } from "lucide-react";
@@ -82,21 +82,28 @@ export function DayGrid({
 
   const columnIds = useMemo(() => new Set(columns.map((c) => c.id)), [columns]);
 
+  // Track rows that have local edits not yet confirmed by the DB.
+  // The sync effect below uses this to decide whether to accept remote data.
+  const pendingRowsRef = useRef(new Set<string>());
+
   const [localCells, setLocalCells] = useState(() => buildLocalCells(rows));
 
   useEffect(() => {
-    setLocalCells((prev) => {
+    setLocalCells((_prev) => {
       const next = new Map<string, Record<string, string>>();
       for (const row of rows) {
-        const local = prev.get(row.id);
-        // Keep local version if it exists (preserves in-progress edits)
-        next.set(row.id, local ?? { ...row.cells });
+        if (pendingRowsRef.current.has(row.id)) {
+          next.set(row.id, _prev.get(row.id) ?? { ...row.cells });
+        } else {
+          next.set(row.id, { ...row.cells });
+        }
       }
       return next;
     });
-  }, [rows]);
+  }, [rows, dayId]);
 
   const handleCellChange = useCallback((rowId: string, colId: string, value: string) => {
+    pendingRowsRef.current.add(rowId);
     setLocalCells((prev) => {
       const next = new Map(prev);
       const rowCells = { ...(prev.get(rowId) ?? {}) };
@@ -111,6 +118,20 @@ export function DayGrid({
   }, []);
 
   const defaultBulkSave = useCallback(async () => false, []);
+
+  // Wrap the save function so we can clear pending-row tracking on success.
+  const wrappedBulkSaveFn = useCallback(
+    async (updates: { rowId: string; cells: Record<string, string> }[]): Promise<boolean> => {
+      const result = await (bulkSaveFn ?? defaultBulkSave)(updates);
+      if (result) {
+        for (const { rowId } of updates) {
+          pendingRowsRef.current.delete(rowId);
+        }
+      }
+      return result;
+    },
+    [bulkSaveFn, defaultBulkSave],
+  );
 
   const {
     editingCell,
@@ -134,7 +155,7 @@ export function DayGrid({
     columns,
     localCells,
     onCellChange: handleCellChange,
-    bulkSaveFn: bulkSaveFn ?? defaultBulkSave,
+    bulkSaveFn: wrappedBulkSaveFn,
     onPasteRows,
   });
 

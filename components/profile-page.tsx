@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
 import { createTables } from "@/lib/db";
-import type { UserMetadata, PersonalBestLift } from "@/lib/types/database";
+import type { UserMetadata, PersonalBestLift, CoachAthleteWithProfile, AthleteCoachWithProfile } from "@/lib/types/database";
+import { CoachSection } from "@/components/coach-section";
 
 function parseFloatOrNull(value: string): number | null {
   if (!value.trim()) return null;
@@ -25,6 +26,8 @@ interface ProfilePageProps {
   initialMetadata: UserMetadata;
   email: string;
   userId: string;
+  initialAthletes: CoachAthleteWithProfile[];
+  initialCoachRelationships: AthleteCoachWithProfile[];
 }
 
 const PB_FIELDS = [
@@ -65,6 +68,8 @@ export function ProfilePage({
   initialMetadata,
   email,
   userId,
+  initialAthletes,
+  initialCoachRelationships,
 }: ProfilePageProps) {
   const [draft, setDraft] = useState<Draft>(() => buildDraft(initialMetadata));
   const [originalDraft] = useState<Draft>(() => buildDraft(initialMetadata));
@@ -209,6 +214,13 @@ export function ProfilePage({
           </div>
         ))}
       </div>
+
+      {/* Coach & Athletes */}
+      <CoachSection
+        initialAthletes={initialAthletes}
+        initialCoachRelationships={initialCoachRelationships}
+        userId={userId}
+      />
 
       {/* Save */}
       <div className="flex items-center gap-3">

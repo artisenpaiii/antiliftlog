@@ -52,6 +52,7 @@ export const WEEKDAY_SHORT_LABELS: Record<number, string> = {
 export interface DayColumn {
   id: string;
   day_id: string;
+  block_id: string;
   label: string;
   order: number;
   created_at: string;
@@ -61,6 +62,7 @@ export interface DayColumn {
 export interface DayRow {
   id: string;
   day_id: string;
+  block_id: string;
   order: number;
   cells: Record<string, string>;
   created_at: string;
@@ -114,9 +116,9 @@ export type DayInsert = Omit<Day, "id" | "created_at" | "updated_at" | "sleep_ti
   week_day_index?: number | null;
 };
 
-export type DayColumnInsert = Omit<DayColumn, "id" | "created_at" | "updated_at">;
+export type DayColumnInsert = Omit<DayColumn, "id" | "block_id" | "created_at" | "updated_at">;
 
-export type DayRowInsert = Omit<DayRow, "id" | "created_at" | "updated_at">;
+export type DayRowInsert = Omit<DayRow, "id" | "block_id" | "created_at" | "updated_at">;
 
 export type CompetitionInsert = Omit<Competition, "id" | "created_at" | "updated_at">;
 
@@ -130,9 +132,9 @@ export type WeekUpdate = Partial<Omit<Week, "id" | "created_at" | "updated_at">>
 
 export type DayUpdate = Partial<Omit<Day, "id" | "created_at" | "updated_at">>;
 
-export type DayColumnUpdate = Partial<Omit<DayColumn, "id" | "created_at" | "updated_at">>;
+export type DayColumnUpdate = Partial<Omit<DayColumn, "id" | "block_id" | "created_at" | "updated_at">>;
 
-export type DayRowUpdate = Partial<Omit<DayRow, "id" | "created_at" | "updated_at">>;
+export type DayRowUpdate = Partial<Omit<DayRow, "id" | "block_id" | "created_at" | "updated_at">>;
 
 export type CompetitionUpdate = Partial<Omit<Competition, "id" | "created_by" | "created_at" | "updated_at">>;
 
@@ -179,4 +181,44 @@ export interface UserMetadata {
   pb_squat_comp: number | null;
   pb_bench_comp: number | null;
   pb_deadlift_comp: number | null;
+}
+
+// -------------------------
+// Coach-Athlete Relationships
+// -------------------------
+
+export type CoachAthleteStatus = 'pending' | 'accepted' | 'declined';
+export type CoachAthleteInitiatorRole = 'coach' | 'athlete';
+
+export interface CoachAthleteRelationship {
+  id: string;
+  coach_id: string;
+  athlete_id: string;
+  status: CoachAthleteStatus;
+  initiator_role: CoachAthleteInitiatorRole;
+  created_at: string;
+  updated_at: string;
+}
+
+export type CoachAthleteInsert = Omit<
+  CoachAthleteRelationship,
+  'id' | 'created_at' | 'updated_at' | 'status'
+> & { status?: CoachAthleteStatus };
+
+export type CoachAthleteUpdate = Pick<CoachAthleteRelationship, 'status'>;
+
+export interface UserProfile {
+  id: string;
+  email: string;
+  display_name: string;
+}
+
+export interface CoachAthleteWithProfile {
+  relationship: CoachAthleteRelationship;
+  athlete: UserProfile;
+}
+
+export interface AthleteCoachWithProfile {
+  relationship: CoachAthleteRelationship;
+  coach: UserProfile;
 }

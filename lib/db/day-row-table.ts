@@ -45,12 +45,13 @@ export class DayRowTable extends BaseTable<
 
   async bulkUpdateCells(
     dayId: string,
+    blockId: string,
     rows: { id: string; cells: Record<string, string> }[],
   ): Promise<DbResult<DayRow[]>> {
     const { data, error } = await this.supabase
       .from(this.tableName)
       .upsert(
-        rows.map((r) => ({ id: r.id, day_id: dayId, cells: r.cells })),
+        rows.map((r) => ({ id: r.id, day_id: dayId, block_id: blockId, cells: r.cells })),
         { onConflict: "id" },
       )
       .select();

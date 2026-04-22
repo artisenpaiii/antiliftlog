@@ -8,9 +8,10 @@ import {
   useState,
   useCallback,
   useMemo,
+  useEffect,
   type ReactNode,
 } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { createClient, createRealtimeClient } from "@/lib/supabase/client";
 import { createTables } from "@/lib/db";
 import { BlockStore } from "@/lib/stores/block-store";
 import type {
@@ -76,28 +77,60 @@ export function useBlockCache(): BlockCacheContextValue {
 
 interface BlockCacheProviderProps {
   blockId: string;
+  enableRealtime?: boolean;
   children: ReactNode;
 }
 
 export function BlockCacheProvider({
   blockId,
+  enableRealtime = false,
   children,
 }: BlockCacheProviderProps) {
-  // Create store once per blockId, recreate when blockId changes
-  const storeRef = useRef<{ blockId: string; store: BlockStore } | null>(null);
+  // Create store once per blockId, recreate when blockId changes.
+  // Store the supabase client alongside so it's reused for realtime (same instance = same auth state).
+  const storeRef = useRef<{ blockId: string; store: BlockStore; supabase: ReturnType<typeof createClient> } | null>(null);
   if (!storeRef.current || storeRef.current.blockId !== blockId) {
     const supabase = createClient();
     const tables = createTables(supabase);
     const store = new BlockStore(blockId, tables);
     store.load();
-    storeRef.current = { blockId, store };
+    storeRef.current = { blockId, store, supabase };
   }
   const store = storeRef.current.store;
+  const supabaseRef = storeRef.current.supabase;
 
   const snapshot = useSyncExternalStore(
     useCallback((cb: () => void) => store.subscribe(cb), [store]),
     useCallback(() => store.getSnapshot(), [store]),
   );
+
+  useEffect(() => {
+    if (!enableRealtime || snapshot.loading) return;
+
+    let cancelled = false;
+    let cleanupFn: (() => void) | undefined;
+
+    (async () => {
+      const { data: { session } } = await supabaseRef.auth.getSession();
+      if (cancelled) return;
+
+      if (!session?.access_token) return;
+
+      // Build a realtime-only client whose WebSocket URL carries the JWT as
+      // ?apikey so the server opens the connection as the authenticated user.
+      // The default client uses the anon key there, causing RLS to evaluate
+      // as the anon role and filter out all postgres_changes events.
+      const rtClient = createRealtimeClient(session.access_token);
+      cleanupFn = store.startRealtime(rtClient);
+      if (cancelled) cleanupFn();
+    })();
+
+    return () => {
+      cancelled = true;
+      cleanupFn?.();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enableRealtime, snapshot.loading, store, blockId]);
 
   // UI-only state
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
