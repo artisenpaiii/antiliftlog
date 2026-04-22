@@ -63,6 +63,7 @@ function AthleteContent({ athleteId }: { athleteId: string }) {
         .channel(`programs-athlete-${athleteId}`)
         .on("postgres_changes", {
           event: "*", schema: "public", table: "programs",
+          filter: `created_by=eq.${athleteId}`,
         }, refreshPrograms)
         .subscribe();
       cleanupRt = () => rtClient.removeChannel(channel);
@@ -102,6 +103,7 @@ function AthleteContent({ athleteId }: { athleteId: string }) {
         .channel(`blocks-program-${programId}`)
         .on("postgres_changes", {
           event: "*", schema: "public", table: "blocks",
+          filter: `program_id=eq.${programId}`,
         }, refreshBlocks)
         .subscribe();
       cleanupRt = () => rtClient.removeChannel(channel);

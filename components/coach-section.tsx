@@ -4,7 +4,6 @@ import { useState, useTransition, useEffect, useCallback } from "react";
 import { UserPlus, Users, Check, X, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
 import { createTables } from "@/lib/db";
 import {
@@ -63,7 +62,7 @@ export function CoachSection({
     const supabase = createClient();
     const tables = createTables(supabase);
     Promise.all([
-      tables.coachAthletes.findAthletes(userId),
+      tables.coachAthletes.findAllAthleteRelationships(userId),
       tables.coachAthletes.findCoachRelationships(userId),
     ]).then(([athletesResult, coachRelsResult]) => {
       if (athletesResult.data) setAthletes(athletesResult.data);

@@ -56,6 +56,40 @@ export class CoachAthleteTable extends BaseTable<
     return { data: result, error: null };
   }
 
+  async findAllAthleteRelationships(coachId: string): Promise<DbResult<CoachAthleteWithProfile[]>> {
+    const { data: relationships, error } = await this.supabase
+      .from(this.tableName)
+      .select("*")
+      .eq("coach_id", coachId)
+      .order("created_at");
+
+    if (error) return { data: null, error: this.toError(error) };
+    if (!relationships?.length) return { data: [], error: null };
+
+    const athleteIds = relationships.map((r) => r.athlete_id as string);
+    const { data: profiles, error: profileError } = await this.supabase.rpc(
+      "get_user_profiles",
+      { user_ids: athleteIds },
+    );
+
+    if (profileError) return { data: null, error: this.toError(profileError) };
+
+    const profileMap = new Map<string, UserProfile>(
+      (profiles as UserProfile[] ?? []).map((p) => [p.id, p]),
+    );
+
+    const result: CoachAthleteWithProfile[] = relationships.map((r) => ({
+      relationship: r as CoachAthleteRelationship,
+      athlete: profileMap.get(r.athlete_id as string) ?? {
+        id: r.athlete_id as string,
+        email: "",
+        display_name: "",
+      },
+    }));
+
+    return { data: result, error: null };
+  }
+
   async findCoachRelationships(athleteId: string): Promise<DbResult<AthleteCoachWithProfile[]>> {
     const { data: relationships, error } = await this.supabase
       .from(this.tableName)

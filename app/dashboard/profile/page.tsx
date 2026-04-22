@@ -19,7 +19,7 @@ async function ProfileContent() {
     await Promise.all([
       tables.programs.findByUserId(user.id),
       tables.competitions.findByUserId(user.id),
-      tables.coachAthletes.findAthletes(user.id),
+      tables.coachAthletes.findAllAthleteRelationships(user.id),
       tables.coachAthletes.findCoachRelationships(user.id),
     ]);
 

@@ -5,9 +5,9 @@ import { CoachNavButton } from "@/components/coach-nav-button";
 import { createClient } from "@/lib/supabase/server";
 import { Dumbbell } from "lucide-react";
 import Link from "next/link";
-import { Suspense } from "react";
+import { Suspense, cache } from "react";
 
-async function checkIsCoach(userId: string): Promise<boolean> {
+const checkIsCoach = cache(async (userId: string): Promise<boolean> => {
   const supabase = await createClient();
   const { data } = await supabase
     .from("coach_athlete_relationships")
@@ -16,7 +16,7 @@ async function checkIsCoach(userId: string): Promise<boolean> {
     .eq("status", "accepted")
     .limit(1);
   return (data?.length ?? 0) > 0;
-}
+});
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
