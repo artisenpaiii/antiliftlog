@@ -36,6 +36,7 @@ export interface Day {
   sleep_time: number | null;
   sleep_quality: number | null;
   week_day_index: number | null;
+  hidden: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -110,10 +111,11 @@ export type BlockInsert = Omit<Block, "id" | "created_at" | "updated_at" | "star
 
 export type WeekInsert = Omit<Week, "id" | "created_at" | "updated_at">;
 
-export type DayInsert = Omit<Day, "id" | "created_at" | "updated_at" | "sleep_time" | "sleep_quality" | "week_day_index"> & {
+export type DayInsert = Omit<Day, "id" | "created_at" | "updated_at" | "sleep_time" | "sleep_quality" | "week_day_index" | "hidden"> & {
   sleep_time?: number | null;
   sleep_quality?: number | null;
   week_day_index?: number | null;
+  hidden?: boolean;
 };
 
 export type DayColumnInsert = Omit<DayColumn, "id" | "block_id" | "created_at" | "updated_at">;

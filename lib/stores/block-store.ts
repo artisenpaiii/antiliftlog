@@ -201,7 +201,25 @@ export class BlockStore {
     }
 
     const days = this._daysByWeekId.get(weekId) ?? [];
-    this._weeks = this._weeks.filter((w) => w.id !== weekId);
+    const remaining = this._weeks
+      .filter((w) => w.id !== weekId)
+      .sort((a, b) => a.week_number - b.week_number);
+
+    const renumbered = await Promise.all(
+      remaining.map(async (w, i) => {
+        const expected = i + 1;
+        if (w.week_number === expected) return w;
+        const { data, error: updateError } = await this.tables.weeks.update(w.id, {
+          week_number: expected,
+        });
+        if (updateError || !data) {
+          console.error("Failed to renumber week:", updateError);
+          return { ...w, week_number: expected };
+        }
+        return data;
+      }),
+    );
+    this._weeks = renumbered;
 
     const nextDays = new Map(this._daysByWeekId);
     nextDays.delete(weekId);

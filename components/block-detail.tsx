@@ -17,6 +17,7 @@ interface BlockDetailProps {
   block: Block;
   onBack?: () => void;
   enableRealtime?: boolean;
+  isCoachView?: boolean;
 }
 
 function FatigueToggleButton() {
@@ -35,9 +36,9 @@ function FatigueToggleButton() {
   );
 }
 
-export function BlockDetail({ block, onBack, enableRealtime }: BlockDetailProps) {
+export function BlockDetail({ block, onBack, enableRealtime, isCoachView }: BlockDetailProps) {
   return (
-    <BlockCacheProvider blockId={block.id} enableRealtime={enableRealtime}>
+    <BlockCacheProvider blockId={block.id} enableRealtime={enableRealtime} isCoachView={isCoachView}>
       <BlockDetailInner block={block} onBack={onBack} />
     </BlockCacheProvider>
   );

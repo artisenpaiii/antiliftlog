@@ -13,11 +13,12 @@ interface WeekContentProps {
 }
 
 export function WeekContent({ weekId }: WeekContentProps) {
-  const { getDays, getColumns, cacheInsertDay } = useBlockCache();
+  const { getDays, getColumns, cacheInsertDay, isCoachView } = useBlockCache();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
 
-  const days = getDays(weekId);
+  const allDays = getDays(weekId);
+  const days = isCoachView ? allDays : allDays.filter((d) => !d.hidden);
 
   function handleOpenCreateDialog() {
     setDialogOpen(true);
@@ -103,7 +104,7 @@ export function WeekContent({ weekId }: WeekContentProps) {
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         weekId={weekId}
-        nextDayNumber={days.length + 1}
+        nextDayNumber={allDays.length + 1}
         suggestedColumns={suggestedColumns}
         onDayCreated={(day, columns) => cacheInsertDay(weekId, day, columns)}
       />

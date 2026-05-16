@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Loader2, Trash2, ChevronRight, Moon, SeparatorHorizontal, TableProperties, MoreVertical, Pencil } from "lucide-react";
+import { Plus, Loader2, Trash2, ChevronRight, Moon, SeparatorHorizontal, TableProperties, MoreVertical, Pencil, Eye, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -65,6 +65,7 @@ export function DayCard({ day }: DayCardProps) {
     bulkUpdateRowCells,
     expandedDays,
     toggleDay,
+    isCoachView,
   } = useBlockCache();
 
   const columns = getColumns(day.id);
@@ -226,8 +227,13 @@ export function DayCard({ day }: DayCardProps) {
     ? `${WEEKDAY_SHORT_LABELS[day.week_day_index]} - ${day.name ?? `Day ${day.day_number}`}`
     : day.name ?? `Day ${day.day_number}`;
 
+  const hiddenForCoach = isCoachView && day.hidden;
+
   return (
-    <div className="rounded-lg border border-border">
+    <div className={cn(
+      "rounded-lg border border-border",
+      hiddenForCoach && "border-dashed opacity-60",
+    )}>
       <div
         className={cn(
           "flex w-full items-center gap-2 px-4 py-3 transition-colors",
@@ -271,7 +277,12 @@ export function DayCard({ day }: DayCardProps) {
               className="text-sm font-medium bg-transparent border-b border-primary outline-none flex-1 min-w-0"
             />
           ) : (
-            <h4 className="text-sm font-medium flex-1 truncate">{dayLabel}</h4>
+            <h4 className="text-sm font-medium flex-1 truncate flex items-center gap-1.5">
+              {hiddenForCoach && (
+                <EyeOff size={12} className="text-muted-foreground shrink-0" />
+              )}
+              <span className="truncate">{dayLabel}</span>
+            </h4>
           )}
         </div>
         <span className="text-xs text-muted-foreground shrink-0">
@@ -325,6 +336,21 @@ export function DayCard({ day }: DayCardProps) {
               )} />
               Sleep Info
             </DropdownMenuItem>
+            {isCoachView && (
+              <DropdownMenuItem onClick={() => updateDay(day.id, { hidden: !day.hidden })}>
+                {day.hidden ? (
+                  <>
+                    <Eye size={14} className="mr-2" />
+                    Show to athlete
+                  </>
+                ) : (
+                  <>
+                    <EyeOff size={14} className="mr-2" />
+                    Hide from athlete
+                  </>
+                )}
+              </DropdownMenuItem>
+            )}
             <DropdownMenuSeparator />
             <DropdownMenuItem
               onClick={() => setDeleteOpen(true)}

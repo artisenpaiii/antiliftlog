@@ -29,6 +29,7 @@ import type { ImportDayData, ImportWeekData } from "@/lib/types/import";
 interface BlockCacheContextValue {
   loading: boolean;
   weeks: Week[];
+  isCoachView: boolean;
 
   getDays(weekId: string): Day[];
   getColumns(dayId: string): DayColumn[];
@@ -78,12 +79,14 @@ export function useBlockCache(): BlockCacheContextValue {
 interface BlockCacheProviderProps {
   blockId: string;
   enableRealtime?: boolean;
+  isCoachView?: boolean;
   children: ReactNode;
 }
 
 export function BlockCacheProvider({
   blockId,
   enableRealtime = false,
+  isCoachView = false,
   children,
 }: BlockCacheProviderProps) {
   // Create store once per blockId, recreate when blockId changes.
@@ -151,6 +154,7 @@ export function BlockCacheProvider({
     () => ({
       loading: snapshot.loading,
       weeks: snapshot.weeks,
+      isCoachView,
       getDays: (weekId: string) => store.getDays(weekId),
       getColumns: (dayId: string) => store.getColumns(dayId),
       getRows: (dayId: string) => store.getRows(dayId),
@@ -173,7 +177,7 @@ export function BlockCacheProvider({
       expandedDays,
       toggleDay,
     }),
-    [snapshot, store, expandedDays, toggleDay],
+    [snapshot, store, expandedDays, toggleDay, isCoachView],
   );
 
   return (

@@ -16,9 +16,10 @@ interface ProgramDetailProps {
   program: Program;
   initialBlocks: Block[];
   hasCoach?: boolean;
+  isCoachView?: boolean;
 }
 
-export function ProgramDetail({ program, initialBlocks, hasCoach = false }: ProgramDetailProps) {
+export function ProgramDetail({ program, initialBlocks, hasCoach = false, isCoachView = false }: ProgramDetailProps) {
   const [programName, setProgramName] = useState(program.name);
   const [blocks, setBlocks] = useState<Block[]>(initialBlocks);
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
@@ -94,6 +95,7 @@ export function ProgramDetail({ program, initialBlocks, hasCoach = false }: Prog
               block={selectedBlock}
               onBack={() => setSelectedBlockId(null)}
               enableRealtime={hasCoach}
+              isCoachView={isCoachView}
             />
           ) : (
             <div className="flex h-full items-center justify-center">

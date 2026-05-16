@@ -174,7 +174,7 @@ function AthleteContent({ athleteId }: { athleteId: string }) {
           <ArrowLeft size={14} />
           {view.program.name}
         </button>
-        <BlockDetail block={view.block} enableRealtime />
+        <BlockDetail block={view.block} enableRealtime isCoachView />
       </div>
     );
   }

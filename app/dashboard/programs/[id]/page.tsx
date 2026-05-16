@@ -30,12 +30,14 @@ async function ProgramDetailContent({
 
   const { data: blocks } = await tables.blocks.findByProgramId(id);
   const hasCoach = (coachResult.data ?? []).some((r) => r.relationship.status === "accepted");
+  const isCoachView = programResult.data.created_by !== data.claims.sub;
 
   return (
     <ProgramDetail
       program={programResult.data}
       initialBlocks={blocks ?? []}
       hasCoach={hasCoach}
+      isCoachView={isCoachView}
     />
   );
 }
