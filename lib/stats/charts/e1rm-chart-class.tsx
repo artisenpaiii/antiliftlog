@@ -37,7 +37,8 @@ export class E1RMChartClass implements StatsChart {
     );
   }
 
-  private computeData(): { dataPoints: E1RMDataPoint[]; activeLiftTypes: LiftType[] } {
+  /** Public so format-export.ts can call it directly */
+  computeData(): { dataPoints: E1RMDataPoint[]; activeLiftTypes: LiftType[] } {
     const rawPoints: Omit<E1RMDataPoint, "squatSmoothed" | "benchSmoothed" | "deadliftSmoothed">[] = [];
     const activeLiftTypes = new Set<LiftType>();
     const dayIndex = buildDayIndex(this.records);

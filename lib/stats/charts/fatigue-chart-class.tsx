@@ -62,10 +62,22 @@ export class FatigueChartClass implements StatsChart {
           const dayScores: Record<LiftType, number> = { squat: 0, bench: 0, deadlift: 0 };
 
           for (const rec of dayRecords) {
-            const rpe = this.rpeType === "planned" && rec.plannedRpe > 0 ? rec.plannedRpe : rec.rpe;
+            // Fall back to the other RPE column when the preferred one is blank,
+            // so a logged set is never scored as zero just because "True RPE" is empty.
+            const rpe =
+              this.rpeType === "planned"
+                ? rec.plannedRpe > 0
+                  ? rec.plannedRpe
+                  : rec.rpe
+                : rec.rpe > 0
+                  ? rec.rpe
+                  : rec.plannedRpe;
             if (rec.reps <= 0 || rpe <= 0) continue;
+            // A single aggregated row can represent multiple identical sets (Sets: "4").
+            // Count every set, defaulting to 1 when no set count is recorded.
+            const sets = rec.sets > 0 ? rec.sets : 1;
             const effort = Math.max(rpe - 5, 0);
-            const setFatigue = rec.reps * effort * LIFT_MULTIPLIERS[rec.classification.mainLift];
+            const setFatigue = sets * rec.reps * effort * LIFT_MULTIPLIERS[rec.classification.mainLift];
             dayScores[rec.classification.mainLift] += setFatigue;
             if (setFatigue > 0) activeLiftTypes.add(rec.classification.mainLift);
           }

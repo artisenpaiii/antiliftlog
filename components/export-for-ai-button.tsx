@@ -26,7 +26,16 @@ export function ExportForAiButton({ program }: ExportForAiButtonProps) {
       const supabase = createClient();
       const tables = createTables(supabase);
       const { hierarchy, settings } = await loadProgramHierarchy(tables, program.id);
-      const json = formatProgramExport(program, hierarchy, settings);
+
+      const { data: { user } } = await supabase.auth.getUser();
+      const m = user?.user_metadata ?? {};
+      const userPRs = {
+        squat: typeof m.pb_squat_gym === "number" ? m.pb_squat_gym : null,
+        bench: typeof m.pb_bench_gym === "number" ? m.pb_bench_gym : null,
+        deadlift: typeof m.pb_deadlift_gym === "number" ? m.pb_deadlift_gym : null,
+      };
+
+      const json = formatProgramExport(program, hierarchy, settings, userPRs);
 
       const filename = `${program.name.replace(/[^a-zA-Z0-9-_ ]/g, "").trim()}.json`;
       const blob = new Blob([json], { type: "application/json" });

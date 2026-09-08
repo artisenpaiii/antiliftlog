@@ -489,9 +489,10 @@ export function StatsDetail({ program, onBack }: StatsDetailProps) {
                           <div className="space-y-1.5">
                             <p className="font-medium text-foreground">Base fatigue</p>
                             <p className="text-muted-foreground">
-                              Each set:{" "}
-                              <span className="text-foreground">reps × (RPE − 5) × lift multiplier</span>. Sets at
-                              RPE ≤ 5 count as zero.
+                              Each row:{" "}
+                              <span className="text-foreground">sets × reps × (RPE − 5) × lift multiplier</span>. Sets
+                              at RPE ≤ 5 count as zero. If a row&apos;s RPE is blank, the other RPE column (planned
+                              vs. actual) is used as a fallback.
                             </p>
                             <div className="text-muted-foreground">
                               <p className="mb-0.5">Multipliers reflect systemic demand:</p>

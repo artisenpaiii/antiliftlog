@@ -25,7 +25,8 @@ export class IntensityChartClass implements StatsChart {
     );
   }
 
-  private computeData(): { dataPoints: IntensityZonePoint[]; hasData: boolean } {
+  /** Public so format-export.ts can call it directly */
+  computeData(): { dataPoints: IntensityZonePoint[]; hasData: boolean } {
     const dataPoints: IntensityZonePoint[] = [];
     let hasData = false;
 

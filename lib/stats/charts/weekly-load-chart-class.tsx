@@ -26,7 +26,8 @@ export class WeeklyLoadChartClass implements StatsChart {
     );
   }
 
-  private computeData(): WeeklyLoadRow[] {
+  /** Public so format-export.ts can call it directly */
+  computeData(): WeeklyLoadRow[] {
     const rows: WeeklyLoadRow[] = [];
 
     const weekIndex = new Map<string, ParsedLiftRecord[]>();
